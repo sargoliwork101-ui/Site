@@ -197,6 +197,39 @@ function handle_upload($file, array $exts, $max_mb = null) {
     return ['ok' => true, 'url' => 'uploads/' . $name];
 }
 
+/* ---------------- پاک‌سازی فایل‌های آپلود ---------------- */
+
+/** آیا مسیر، فایل آپلودی است که خود سایت ساخته؟ (برای پاک‌سازی امن) */
+function is_managed_upload_path($rel) {
+    return is_string($rel) && preg_match('#^uploads/[0-9]{6}_[0-9a-f]{16}\.pdf$#i', $rel) === 1;
+}
+
+/** آیا فایلی هنوز در داده‌های سایت ارجاع شده؟ */
+function upload_referenced(array $data, $rel) {
+    foreach (['cv_pdf', 'avatar'] as $k) {
+        if ((string)($data['settings'][$k] ?? '') === $rel) return true;
+    }
+    foreach (($data['papers'] ?? []) as $p) {
+        if ((string)($p['pdf'] ?? '') === $rel) return true;
+    }
+    return false;
+}
+
+/**
+ * حذف امن فایل آپلودی که دیگر ارجاعی ندارد:
+ * فقط فایل‌های با الگوی نام خود سایت و فقط داخل پوشه uploads
+ */
+function unlink_upload(array $data, $rel) {
+    $rel = (string)$rel;
+    if (!is_managed_upload_path($rel) || upload_referenced($data, $rel)) return false;
+    $base = realpath(dirname(__DIR__) . '/uploads');
+    $abs  = realpath(dirname(__DIR__) . '/' . $rel);
+    if ($base === false || $abs === false || strncmp($abs, $base . DIRECTORY_SEPARATOR, strlen($base) + 1) !== 0) {
+        return false;
+    }
+    return @unlink($abs);
+}
+
 /** پیام موقت (flash) */
 function flash($msg = null, $type = 'ok') {
     if ($msg !== null) {

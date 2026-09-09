@@ -37,7 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'ایمیل مقصد معتبر نیست.';
         } else {
-            $host = (string)($_SERVER['SERVER_NAME'] ?? 'localhost');
+            $host = preg_replace('/[^a-z0-9.\-]/i', '', (string)($_SERVER['SERVER_NAME'] ?? 'localhost'));
+            if ($host === '') $host = 'localhost';
             $ok = @mail($to, '=?UTF-8?B?' . base64_encode('ایمیل آزمایشی وبسایت') . '?=',
                 'این یک ایمیل آزمایشی از فرم سایت شماست. اگر آن را دریافت کردید، ارسال ایمیل روی هاست درست کار می‌کند.',
                 "From: no-reply@" . $host . "\r\nContent-Type: text/plain; charset=UTF-8");
@@ -50,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } else {
         $s = $data['settings'];
+        $old_cv = (string)($s['cv_pdf'] ?? '');
         $s['site_name']    = bi_from_post('site_name');
         $s['person_name']  = trim((string)($_POST['person_name'] ?? ''));
         $s['person_title'] = bi_from_post('person_title');
@@ -70,11 +72,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else $errors[] = 'فایل رزومه: ' . $up['error'];
         } elseif (!empty($_POST['del_cv'])) {
             $s['cv_pdf'] = '';
+        } elseif (is_managed_upload_path($_POST['cv_pdf'] ?? '')) {
+            // فایل از قبل با آپلود مستقیم (جاوااسکریپت) در uploads ذخیره شده
+            $s['cv_pdf'] = (string)$_POST['cv_pdf'];
         }
         $data['settings'] = $s;
         if (!$errors) {
             if (save_data($data)) {
                 flash('تنظیمات با موفقیت ذخیره شد.');
+                // پاک‌سازی فایل‌های رزومه که دیگر ارجاعی ندارند
+                $final_cv = (string)$s['cv_pdf'];
+                foreach (array_unique(array_filter([$old_cv, (string)($_POST['cv_pdf'] ?? '')])) as $c) {
+                    if ($c !== '' && $c !== $final_cv) unlink_upload($data, $c);
+                }
                 redirect(url('admin/settings.php'));
             }
             $errors[] = 'ذخیره‌سازی انجام نشد (فایل data/content.json را بررسی کنید).';
@@ -133,6 +143,7 @@ require __DIR__ . '/includes/header.php';
             <?php endif; ?>
           </div>
           <input type="file" name="cv_pdf" accept="application/pdf">
+          <input type="hidden" name="cv_pdf" value="<?= e($s['cv_pdf']) ?>">
         </div>
         <?php if (!empty($s['cv_pdf'])): ?>
           <label class="check"><input type="checkbox" name="del_cv" value="1"> حذف فایل فعلی</label>

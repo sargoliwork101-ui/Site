@@ -39,9 +39,15 @@ if ($route === 'contact' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $contact_result = 'error';
     } else {
         $to = (string)($s['email'] ?? '');
+        // دامنه فرستنده باید فقط شامل کاراکترهای امن باشد (جلوگیری از تزریق در هدر ایمیل)
+        $host = preg_replace('/[^a-z0-9.\-]/i', '', (string)($_SERVER['SERVER_NAME'] ?? 'localhost'));
+        if ($host === '') $host = 'localhost';
         $subject = '=?UTF-8?B?' . base64_encode('تماس از وبسایت: ' . $name) . '?=';
-        $body = "نام: $name\nایمیل: $email\n\n$message\n\n--\nارسال از فرم تماس وبسایت";
-        $headers = "From: =?UTF-8?B?" . base64_encode($s['person_name'] ?? 'وبسایت') . "?= <no-reply@" . ($_SERVER['SERVER_NAME'] ?? 'localhost') . ">\r\nContent-Type: text/plain; charset=UTF-8";
+        $body = "نام: $name\nایمیل: $email\n\n$msg\n\n--\nارسال از فرم تماس وبسایت";
+        // Reply-To: ایمیل بازدیدکننده تا پاسخ به او برسد
+        $headers = "From: =?UTF-8?B?" . base64_encode($s['person_name'] ?? 'وبسایت') . "?= <no-reply@$host>\r\n"
+                 . "Reply-To: <$email>\r\n"
+                 . "Content-Type: text/plain; charset=UTF-8";
         $contact_result = ($to !== '' && @mail($to, $subject, $body, $headers)) ? 'sent' : 'fallback';
     }
     redirect(url('contact') . '?sent=' . $contact_result);

@@ -14,11 +14,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'delete') {
         $id = (string)($_POST['id'] ?? '');
+        $old_pdf = '';
+        foreach ($papers as $p) {
+            if (($p['id'] ?? '') === $id) { $old_pdf = (string)($p['pdf'] ?? ''); break; }
+        }
         $data['papers'] = array_values(array_filter($papers, function ($p) use ($id) {
             return $p['id'] !== $id;
         }));
-        if (save_data($data)) flash('مقاله حذف شد.');
-        else flash('خطا در ذخیره‌سازی.', 'err');
+        if (save_data($data)) {
+            flash('مقاله حذف شد.');
+            unlink_upload($data, $old_pdf);
+        } else flash('خطا در ذخیره‌سازی.', 'err');
     } elseif ($action === 'save') {
         $type = (string)($_POST['type'] ?? '');
         $item = [
@@ -44,22 +50,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'en' => trim((string)($_POST['abstract']['en'] ?? '')),
             ],
         ];
+        $new_pdf = '';
         if (!empty($_FILES['pdf']['name'])) {
             $up = handle_upload($_FILES['pdf'], ['pdf']);
-            if ($up['ok']) $item['pdf'] = $up['url'];
+            if ($up['ok']) { $item['pdf'] = $up['url']; $new_pdf = $up['url']; }
         }
         if (!empty($_POST['del_pdf'])) $item['pdf'] = '';
 
         if ($item['title']['fa'] === '' && $item['title']['en'] === '') {
             flash('عنوان مقاله را (فارسی یا انگلیسی) حتماً وارد کنید.', 'err');
         } else {
+            $old_pdf = '';
             $found = false;
             foreach ($data['papers'] as $i => $p) {
-                if ($p['id'] === $item['id']) { $data['papers'][$i] = $item; $found = true; break; }
+                if ($p['id'] === $item['id']) {
+                    $old_pdf = (string)($p['pdf'] ?? '');
+                    $data['papers'][$i] = $item; $found = true; break;
+                }
             }
             if (!$found) array_unshift($data['papers'], $item);
-            if (save_data($data)) flash('مقاله ذخیره شد.');
-            else flash('خطا در ذخیره‌سازی.', 'err');
+            if (save_data($data)) {
+                flash('مقاله ذخیره شد.');
+                // پاک‌سازی فایل‌های PDF که دیگر به آن‌ها ارجاعی نیست
+                $final = (string)$item['pdf'];
+                foreach (array_unique(array_filter([$old_pdf, (string)($_POST['pdf'] ?? ''), $new_pdf])) as $c) {
+                    if ($c !== $final) unlink_upload($data, $c);
+                }
+            } else flash('خطا در ذخیره‌سازی.', 'err');
         }
     }
     redirect(url('admin/papers.php'));
@@ -109,7 +126,7 @@ require __DIR__ . '/includes/header.php';
       <div class="field"><label>Authors (English)</label><input class="input in-ltr" name="authors[en]" value="<?= e($edit['authors']['en'] ?? '') ?>"></div>
       <div class="field"><label>مجله / کنفرانس / ناشر (فارسی)</label><input class="input" name="venue[fa]" value="<?= e($edit['venue']['fa'] ?? '') ?>"></div>
       <div class="field"><label>Journal / Conference / Publisher (English)</label><input class="input in-ltr" name="venue[en]" value="<?= e($edit['venue']['en'] ?? '') ?>"></div>
-      <div class="field"><label>سال <span class="tip" data-tip="شمسی یا میلادی — مقالات بر اساس همین عدد مرتب می‌شوند">؟</span></label><input class="input" name="year" value="<?= e($edit['year']) ?>" placeholder="مثلاً ۱۴۰"></div>
+      <div class="field"><label>سال <span class="tip" data-tip="شمسی یا میلادی — مقالات بر اساس همین عدد مرتب می‌شوند">؟</span></label><input class="input" name="year" value="<?= e($edit['year']) ?>" placeholder="مثلاً ۱۴۰۳ یا 2024"></div>
       <div class="field">
         <label>نوع <span class="tip" data-tip="برای فیلتر و برچسب مقالات استفاده می‌شود">؟</span></label>
         <select class="input" name="type">

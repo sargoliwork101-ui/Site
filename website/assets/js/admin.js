@@ -28,7 +28,10 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (res.ok) {
-            if (hidden) hidden.value = res.url;
+            if (hidden) {
+              hidden.value = res.url;
+              input.value = ''; // جلوگیری از آپلود دوبارهٔ همان فایل هنگام ذخیرهٔ فرم
+            }
             if (preview) preview.innerHTML = previewHtml(res.url, fp.getAttribute('data-type') || 'file');
             if (label) label.textContent = '✅ ذخیره شد — فرم را ذخیره کنید تا نهایی شود';
           } else {

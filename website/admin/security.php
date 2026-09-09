@@ -76,7 +76,7 @@ $server_info = [
     'upload_max_filesize' => (string)ini_get('upload_max_filesize'),
     'post_max_size' => (string)ini_get('post_max_size'),
     'memory_limit' => (string)ini_get('memory_limit'),
-    'mbstring' => function_exists('mb_strlen') ? 'فعال' : 'غیرفعال (جایگزین داخلی فعال است)',
+    'mbstring' => extension_loaded('mbstring') ? 'فعال' : 'غیرفعال (جایگزین داخلی فعال است)',
 ];
 
 require __DIR__ . '/includes/header.php';
