@@ -21,16 +21,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'change_pass') {
         $cur = (string)($_POST['current'] ?? '');
         $new = (string)($_POST['new'] ?? '');
+        $rec = trim((string)($_POST['recovery_email'] ?? ''));
         $a   = load_auth();
-        if (!empty($a['hash']) && !password_verify($cur, $a['hash'])) {
+        if ($new === '' && $rec === '') {
+            $errors[] = 'موردی برای تغییر وارد نشده است (رمز جدید یا ایمیل بازیابی).';
+        } elseif (!empty($a['hash']) && !password_verify($cur, $a['hash'])) {
             $errors[] = 'رمز عبور فعلی اشتباه است.';
-        } elseif (mb_strlen($new) < 8) {
+        } elseif ($new !== '' && mb_strlen($new) < 8) {
             $errors[] = 'رمز جدید باید حداقل ۸ کاراکتر باشد.';
+        } elseif ($rec !== '' && !filter_var($rec, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'ایمیل بازیابی معتبر نیست.';
         } else {
-            $a['hash'] = password_hash($new, PASSWORD_BCRYPT, ['cost' => 12]);
-            save_auth($a);
-            flash('رمز عبور با موفقیت تغییر کرد.');
-            redirect(url('admin/settings.php'));
+            if ($new !== '') $a['hash'] = password_hash($new, PASSWORD_BCRYPT, ['cost' => 12]);
+            if ($rec !== '') $a['email'] = $rec;
+            $a['created'] = date('Y-m-d H:i');
+            if (save_auth($a)) {
+                flash('رمز عبور / ایمیل بازیابی با موفقیت تغییر کرد.');
+                redirect(url('admin/settings.php'));
+            }
+            $errors[] = 'ذخیره‌سازی انجام نشد (فایل data/auth.json را بررسی کنید).';
         }
     } elseif ($action === 'test_mail') {
         $to = trim((string)($_POST['test_email'] ?? '')) ?: trim((string)($data['settings']['email'] ?? ''));
@@ -93,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $s = $data['settings'];
+$auth_meta = load_auth() ?: [];
 require __DIR__ . '/includes/header.php';
 ?>
 <h1 class="page-h">تنظیمات سایت</h1>
@@ -177,15 +187,16 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <div class="card-p">
-  <h2>تغییر رمز عبور پنل</h2>
+  <h2>تغییر رمز عبور پنل و ایمیل بازیابی</h2>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="change_pass">
     <div class="form-grid">
-      <div class="field"><label>رمز فعلی</label><input class="input" type="password" name="current" required></div>
-      <div class="field"><label>رمز جدید (حداقل ۸ کاراکتر)</label><input class="input" type="password" name="new" minlength="8" required></div>
+      <div class="field"><label>رمز فعلی <span class="tip" data-tip="برای هر تغییری (رمز یا ایمیل) لازم است">؟</span></label><input class="input" type="password" name="current" required></div>
+      <div class="field"><label>رمز جدید <span class="tip" data-tip="حداقل ۸ کاراکتر — اگر فقط می‌خواهید ایمیل بازیابی را عوض کنید، خالی بگذارید">؟</span></label><input class="input" type="password" name="new" minlength="8"></div>
+      <div class="field"><label>ایمیل بازیابی رمز <span class="tip" data-tip="اگر رمز پنل را فراموش کنید، کد بازیابی به همین ایمیل فرستاده می‌شود (لینک «فراموشی رمز عبور» در صفحه ورود). اگر خالی بگذارید تغییر نمی‌کند.">؟</span></label><input class="input in-ltr" type="email" name="recovery_email" dir="ltr" value="<?= e($auth_meta['email'] ?? '') ?>" placeholder="مثلاً admin@example.com"></div>
     </div>
-    <div class="form-actions"><button class="btn btn-soft">تغییر رمز</button></div>
+    <div class="form-actions"><button class="btn btn-soft">ذخیره تغییرات</button></div>
   </form>
 </div>
 <?php require __DIR__ . '/includes/footer.php'; ?>
