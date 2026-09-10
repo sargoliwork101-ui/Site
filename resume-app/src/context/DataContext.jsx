@@ -728,9 +728,19 @@ export const DataProvider = ({ children }) => {
         syncDirtyRef.current = false;
       } else {
         syncDirtyRef.current = true;
+        const err = (r && r.error) || 'network';
+        console.warn('[content-sync] push failed:', err);
         if (!syncWarnedRef.current) {
           syncWarnedRef.current = true;
-          showToast('تغییرات فقط محلی ذخیره شد؛ همگام‌سازی با سرور ناموفق بود.', 'warning');
+          if (err === 'auth_required') {
+            // Our picture of the server session is stale (it died server-side:
+            // GC, restart, another logout...). Stop pretending — the re-login
+            // that follows will auto-publish this newer local copy.
+            setBackend((prev) => (prev ? { ...prev, authenticated: false } : prev));
+            showToast('نشست سرور منقضی شد؛ دوباره وارد شوید تا همگام‌سازی شود.', 'error');
+          } else {
+            showToast('تغییرات فقط محلی ذخیره شد؛ همگام‌سازی با سرور ناموفق بود.', 'warning');
+          }
         }
       }
     }).catch(() => { syncDirtyRef.current = true; });
@@ -1475,17 +1485,19 @@ export const DataProvider = ({ children }) => {
       // from another device), or publish ours when WE are newer and authed.
       try {
         const srv = await serverContentGet();
-        if (srv && srv.ok && !srv.empty && srv.content && typeof srv.content === 'object') {
+        if (srv && srv.ok) {
           // normTs: tolerate millisecond stamps (written by the first sync
           // build) so old local copies compare correctly against seconds.
           const normTs = (t) => (typeof t !== 'number' || !(t > 0) ? 0 : (t > 4102444800 ? Math.floor(t / 1000) : t));
+          const hasServer = !srv.empty && srv.content && typeof srv.content === 'object';
+          const serverTs = hasServer ? normTs(srv.updatedAt) : 0;
           let localTs = 0;
+          let rawLocal = null;
           try {
-            const rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
             localTs = normTs(rawLocal && rawLocal.updatedAt);
-          } catch (e) { /* treat as no local copy */ }
-          const serverTs = normTs(srv.updatedAt);
-          if (serverTs > localTs) {
+          } catch (e) { rawLocal = null; /* treat as no local copy */ }
+          if (hasServer && serverTs > localTs) {
             if (syncDirtyRef.current) {
               showToast('نسخه جدیدتری روی سرور هست ولی تغییرات ذخیره‌نشده محلی دارید؛ نسخه محلی نگه داشته شد.', 'warning');
             } else {
@@ -1493,11 +1505,10 @@ export const DataProvider = ({ children }) => {
               setData(srv.content);
               showToast('آخرین نسخه محتوا از سرور بارگذاری شد ✅');
             }
-          } else if (next.authenticated && localTs > serverTs) {
-            try {
-              const rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-              if (rawLocal && typeof rawLocal === 'object') pushContentToServer(rawLocal);
-            } catch (e) { /* non-fatal */ }
+          } else if (next.authenticated && localTs > serverTs && rawLocal && typeof rawLocal === 'object') {
+            // WE are newer (an empty server counts as oldest) → publish now,
+            // so a re-login flushes edits that failed while the session was dead.
+            pushContentToServer(rawLocal);
           }
         }
       } catch (e) { /* content sync is best-effort; local data always works */ }

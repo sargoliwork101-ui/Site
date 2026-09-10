@@ -14,6 +14,23 @@ require_once __DIR__ . '/config.php';
 // Secure sessions (HttpOnly + SameSite=Lax + Secure-when-HTTPS)
 // ---------------------------------------------------------------------------
 function sec_session_start() {
+  // Private session directory: the shared /tmp is reaped by the HOST's own
+  // garbage collector (24-min default — often by OTHER sites' GC runs or a
+  // cron job), which would silently kill our 2h/12h sessions mid-edit and
+  // every authed endpoint would start 401ing. Our own dir + matching GC
+  // lifetime makes the app-level timeouts the ONLY expiry that applies.
+  // (Files are 0600 by default and covered by api/data/.htaccess deny-all.)
+  $sessDir = DATA_DIR . '/sessions';
+  if (!is_dir($sessDir)) { @mkdir($sessDir, 0750, true); @chmod($sessDir, 0750); }
+  if (is_dir($sessDir) && is_writable($sessDir)) {
+    ini_set('session.save_path', $sessDir);
+  }
+  ini_set('session.gc_maxlifetime', (string)SESSION_ABS_TIMEOUT);
+  ini_set('session.gc_probability', '1');
+  ini_set('session.gc_divisor', '100');
+  ini_set('session.use_strict_mode', '1');   // refuse uninitialized session IDs
+  ini_set('session.use_cookies', '1');
+  ini_set('session.use_only_cookies', '1');
   $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || ((int)($_SERVER['SERVER_PORT'] ?? 80) === 443);
   session_name('rsess');
@@ -40,14 +57,11 @@ function sec_session_start() {
   }
   $_SESSION['last'] = $now;
   if (!isset($_SESSION['created'])) { $_SESSION['created'] = $now; }
-  // Rotate the session ID every 30 min while authenticated (anti-fixation).
-  if (!empty($_SESSION['auth']) && $_SESSION['auth'] === true) {
-    $regen = (int)($_SESSION['regen'] ?? 0);
-    if (($now - $regen) > 1800) {
-      if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
-      $_SESSION['regen'] = $now;
-    }
-  }
+  // NOTE: no periodic ID rotation on purpose. The ID rotates on privilege
+  // change (login/logout/password-change, per OWASP) — rotating it every N
+  // minutes races concurrent tabs: tab A rotates+deletes the file while
+  // tab B's in-flight request still carries the old ID, and tab B eats a
+  // spurious 401. Pruning happens via gc_maxlifetime + the timeouts above.
 }
 
 function sec_is_authed() {
