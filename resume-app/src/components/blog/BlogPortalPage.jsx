@@ -24,6 +24,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { CustomAudioPlayer } from '../common/CustomAudioPlayer';
 import { formatNum } from '../../utils/numberHelper';
+import { sanitizeRichHtml } from '../../utils/security';
 import {
   Newspaper,
   ArrowRight,
@@ -664,9 +665,12 @@ export const BlogPortalPage = () => {
               <div
                 className="prose prose-invert max-w-none text-slate-300 text-sm sm:text-base leading-relaxed space-y-4"
                 dangerouslySetInnerHTML={{
-                  __html: isFa
-                    ? (selectedBlogPost.contentFa || selectedBlogPost.contentMarkdownFa || '<p>محتوای این مقاله در حال بارگذاری است...</p>')
-                    : (selectedBlogPost.contentEn || selectedBlogPost.contentMarkdownEn || selectedBlogPost.contentFa || '<p>Content in preparation...</p>')
+                  // SECURITY: blog HTML is ALWAYS purified (stored-XSS defense)
+                  __html: sanitizeRichHtml(
+                    isFa
+                      ? (selectedBlogPost.contentFa || selectedBlogPost.contentMarkdownFa || '<p>محتوای این مقاله در حال بارگذاری است...</p>')
+                      : (selectedBlogPost.contentEn || selectedBlogPost.contentMarkdownEn || selectedBlogPost.contentFa || selectedBlogPost.contentFa || '<p>Content in preparation...</p>')
+                  )
                 }}
               />
 

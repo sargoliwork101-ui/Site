@@ -4,7 +4,7 @@ import { RichTextEditorModal } from '../common/RichTextEditorModal';
 import { TaxonomyManagerModal } from '../common/TaxonomyManagerModal';
 import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
-import { validateUploadFile } from '../../utils/security';
+import { validateUploadFile, sanitizeSvgDataUrl } from '../../utils/security';
 import { TEMPLATES } from '../../data/templates';
 import {
   LayoutDashboard,
@@ -140,8 +140,13 @@ export const AdminPanel = () => {
     toggleFeaturedBoard,
     adminSecurity,
     updateAdminRecoverySettings,
-    sendEmailVerificationOtp,
-    confirmEmailVerification,
+    requestRecoveryEmailChange,
+    confirmRecoveryEmailChange,
+    saveLocalSecQa,
+    getLocalSecQaQuestions,
+    backend,
+    serverAccountInfo,
+    isDefaultPassword,
     createSnapshot,
     restoreSnapshot,
     deleteSnapshot,
@@ -164,6 +169,16 @@ export const AdminPanel = () => {
   const [recoveryEmailInput, setRecoveryEmailInput] = useState(adminSecurity?.recoveryEmail || '');
   const [securityOtpInput, setSecurityOtpInput] = useState('');
   const [isVerifyingSecurityEmail, setIsVerifyingSecurityEmail] = useState(false);
+  const [isSendingSecurityOtp, setIsSendingSecurityOtp] = useState(false);
+  // Local recovery Q&A (gate for the emergency reset; answers are hashed)
+  const [secQaForm, setSecQaForm] = useState([{ q: '', a: '' }, { q: '', a: '' }]);
+  const [secQaCount, setSecQaCount] = useState(() => {
+    try { return (getLocalSecQaQuestions?.() || []).length; } catch { return 0; }
+  });
+  const [isSavingSecQa, setIsSavingSecQa] = useState(false);
+  const [securityCurrentPw, setSecurityCurrentPw] = useState('');
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [isChangingPw, setIsChangingPw] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedBackup, setCopiedBackup] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState(null);
@@ -201,7 +216,7 @@ export const AdminPanel = () => {
     }
     const reader = new FileReader();
     reader.onload = (event) => {
-      const base64 = event.target?.result;
+      const base64 = sanitizeSvgDataUrl(event.target?.result);
       setCustomFaviconUrl(base64);
       updateSiteConfig({ faviconUrl: base64 });
       updateSeoSettings({ faviconUrl: base64 });
@@ -263,44 +278,94 @@ export const AdminPanel = () => {
     showToast('تنظیمات فویکون، برندینگ و توضیحات سایت با موفقیت ذخیره شد.');
   };
 
-  const handleSendSecurityOtp = () => {
+  const handleSaveSecQa = async () => {
+    if (isSavingSecQa) return;
+    setIsSavingSecQa(true);
+    try {
+      const ok = await saveLocalSecQa(secQaForm);
+      if (ok) {
+        setSecQaForm([{ q: '', a: '' }, { q: '', a: '' }]);
+        try { setSecQaCount((getLocalSecQaQuestions?.() || []).length); } catch { /* ignore */ }
+      } else {
+        showToast('حداقل ۲ سؤال با پاسخ (هر پاسخ حداقل ۳ کاراکتر) لازم است.', 'error');
+      }
+    } finally {
+      setIsSavingSecQa(false);
+    }
+  };
+
+  const handleSendSecurityOtp = async () => {
     const emailToUse = (recoveryEmailInput || '').trim();
     if (!emailToUse || !emailToUse.includes('@')) {
       showToast('لطفاً یک آدرس ایمیل معتبر وارد فرمایید.', 'error');
       return;
     }
-    const res = sendEmailVerificationOtp(emailToUse);
-    if (res?.success) {
-      setIsVerifyingSecurityEmail(true);
+    if (isSendingSecurityOtp) return;
+    setIsSendingSecurityOtp(true);
+    try {
+      // Server mode: current password required + OTP mailed to the NEW inbox.
+      // Local mode: stored directly (no email channel) — labeled honestly.
+      const res = await requestRecoveryEmailChange(securityCurrentPw, emailToUse);
+      if (res?.success) {
+        if (res.local) {
+          setIsVerifyingSecurityEmail(false);
+          setSecurityOtpInput('');
+          setSecurityCurrentPw('');
+        } else if (res.emailSent) {
+          setIsVerifyingSecurityEmail(true);
+        } else {
+          setIsVerifyingSecurityEmail(false);
+        }
+      }
+    } finally {
+      setIsSendingSecurityOtp(false);
     }
   };
 
-  const handleConfirmSecurityOtp = () => {
+  const handleConfirmSecurityOtp = async () => {
     const otpToUse = (securityOtpInput || '').trim();
-    if (!otpToUse || otpToUse.length < 4) {
+    if (!otpToUse || otpToUse.length < 6) {
       showToast('لطفاً کد تایید ۶ رقمی را به صورت کامل وارد فرمایید.', 'error');
       return;
     }
-    const ok = confirmEmailVerification(otpToUse);
-    if (ok) {
-      updateAdminRecoverySettings(recoveryEmailInput);
-      setIsVerifyingSecurityEmail(false);
-      setSecurityOtpInput('');
+    if (isSendingSecurityOtp) return;
+    setIsSendingSecurityOtp(true);
+    try {
+      const ok = await confirmRecoveryEmailChange(otpToUse);
+      if (ok) {
+        updateAdminRecoverySettings(recoveryEmailInput);
+        setIsVerifyingSecurityEmail(false);
+        setSecurityOtpInput('');
+        setSecurityCurrentPw('');
+      }
+    } finally {
+      setIsSendingSecurityOtp(false);
     }
   };
 
-  const handleChangePasswordDirect = () => {
-    if (!newPassword || newPassword.length < 3) {
-      showToast('رمز عبور جدید باید حداقل ۳ کاراکتر باشد.', 'error');
+  const handleChangePasswordDirect = async () => {
+    if (!currentPasswordInput) {
+      showToast('لطفاً رمز عبور فعلی را وارد فرمایید.', 'error');
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      showToast('رمز عبور جدید باید حداقل ۸ کاراکتر باشد.', 'error');
       return;
     }
     if (newPassword !== confirmNewPassword) {
       showToast('تکرار رمز عبور با رمز عبور جدید مطابقت ندارد.', 'error');
       return;
     }
-    if (changeAdminPassword(newPassword)) {
-      setNewPassword('');
-      setConfirmNewPassword('');
+    if (isChangingPw) return;
+    setIsChangingPw(true);
+    try {
+      if (await changeAdminPassword(currentPasswordInput, newPassword)) {
+        setCurrentPasswordInput('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+      }
+    } finally {
+      setIsChangingPw(false);
     }
   };
 
@@ -345,7 +410,7 @@ export const AdminPanel = () => {
       const base64Url = event.target?.result;
       setArticleForm((prev) => ({
         ...(prev || {}),
-        pdfUrl: base64Url,
+        pdfUrl: sanitizeSvgDataUrl(base64Url),
         pdfFileName: file.name,
         pdfFileSize: `${Math.round(file.size / 1024)} KB`,
         pdfFileType: file.name.split('.').pop()?.toUpperCase() || 'PDF'
@@ -369,7 +434,7 @@ export const AdminPanel = () => {
       const base64Url = event.target?.result;
       setBoardForm((prev) => ({
         ...(prev || {}),
-        datasheetUrl: base64Url,
+        datasheetUrl: sanitizeSvgDataUrl(base64Url),
         datasheetFileName: file.name,
         datasheetFileSize: `${Math.round(file.size / 1024)} KB`
       }));
@@ -392,7 +457,7 @@ export const AdminPanel = () => {
       const base64Url = event.target?.result;
       setBoardForm((prev) => ({
         ...(prev || {}),
-        stepFileUrl: base64Url,
+        stepFileUrl: sanitizeSvgDataUrl(base64Url),
         stepFileName: file.name,
         stepFileSize: `${Math.round(file.size / 1024)} KB`
       }));
@@ -861,13 +926,24 @@ export const AdminPanel = () => {
   const copyNginxConfig = () => {
     const config = `server {
     listen 80;
-    server_name your-domain.ir www.your-domain.ir;
-    root /var/www/your-domain.ir/dist;
+    server_name arashtaheri.dev www.arashtaheri.dev;
+    root /var/www/arashtaheri.dev/dist;
     index index.html;
 
     # Gzip Compression for Iran Network
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
+
+    # Security headers (clickjacking / MIME-sniffing / referrer leaks)
+    add_header X-Frame-Options \"SAMEORIGIN\" always;
+    add_header X-Content-Type-Options \"nosniff\" always;
+    add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;
+
+    # NEVER serve PHP secret stores (nginx ignores .htaccess!)
+    location ^~ /api/data/ {
+        deny all;
+        return 403;
+    }
 
     location / {
         try_files $uri $uri/ /index.html;
@@ -4727,12 +4803,21 @@ export const AdminPanel = () => {
                       <pre className="p-4 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-emerald-400 overflow-x-auto text-left leading-relaxed" dir="ltr">
 {`server {
     listen 80;
-    server_name your-domain.ir www.your-domain.ir;
-    root /var/www/your-domain.ir/dist;
+    server_name arashtaheri.dev www.arashtaheri.dev;
+    root /var/www/arashtaheri.dev/dist;
     index index.html;
 
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location ^~ /api/data/ {
+        deny all;
+        return 403;
+    }
 
     location / {
         try_files $uri $uri/ /index.html;
@@ -4746,6 +4831,79 @@ export const AdminPanel = () => {
                 {/* Sub-tab 9: Security & Password */}
                 {settingsSubTab === 'security' && (
                   <div className="space-y-6">
+                    {/* Security-mode banner (honest: server vs local) */}
+                    <div className={`p-4 rounded-2xl border text-xs leading-relaxed ${
+                      backend?.available
+                        ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200'
+                        : 'bg-sky-500/10 border-sky-500/40 text-sky-200'
+                    }`}>
+                      {backend?.available
+                        ? '🔒 حالت امن فعال است: رمزها (bcrypt)، کدهای تایید و محدودیت‌ها سمت سرور اعمال می‌شوند. کد تایید فقط در ایمیل شما موجود است.'
+                        : '🖥️ حالت محلی: بک‌اند (PHP) شناسایی نشد. رمزها هش‌شده محلی‌اند و ارسال ایمیل کد تایید فقط روی هاست واقعی (PHP) کار می‌کند.'}
+                    </div>
+
+                    {/* Factory-default password alarm */}
+                    {isDefaultPassword && (
+                      <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/50 text-xs text-rose-200 leading-relaxed animate-pulse">
+                        ⚠️ هشدار امنیتی: رمز مدیر هنوز پیش‌فرض است! همین حالا از بخش «تغییر کلمه عبور» یک رمز قوی (حداقل ۸ کاراکتر) تعیین کنید.
+                      </div>
+                    )}
+                    {/* 0. LOCAL RECOVERY QUESTIONS (gate for the emergency reset) */}
+                    <div className="p-6 rounded-3xl bg-slate-950/90 border border-slate-800 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                            <ShieldCheck className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm sm:text-base font-bold text-white">
+                              سؤالات بازیابی محلی (قفل ریست اضطراری)
+                            </h4>
+                            <p className="text-xs text-slate-400">
+                              ریست اضطراری رمز فقط با پاسخ درست به این سؤالات باز می‌شود. پاسخ‌ها هش‌شده ذخیره می‌شوند.
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                            secQaCount >= 2
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                          }`}
+                        >
+                          {secQaCount >= 2 ? `✅ ${secQaCount} سؤال ثبت شده` : '⚠️ ثبت نشده — ریست قفل است'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {secQaForm.map((pair, i) => (
+                          <div key={i} className="space-y-2 p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
+                            <input
+                              type="text"
+                              value={pair.q}
+                              onChange={(e) => setSecQaForm((prev) => prev.map((p, j) => (j === i ? { ...p, q: e.target.value } : p)))}
+                              placeholder={`سؤال ${i + 1} (مثلاً: نام اولین مدرسه‌ام؟)`}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-rose-500"
+                            />
+                            <input
+                              type="text"
+                              value={pair.a}
+                              onChange={(e) => setSecQaForm((prev) => prev.map((p, j) => (j === i ? { ...p, a: e.target.value } : p)))}
+                              placeholder="پاسخ (حداقل ۳ کاراکتر)"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-rose-500"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveSecQa}
+                        disabled={isSavingSecQa}
+                        className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSavingSecQa ? 'در حال ذخیره...' : '💾 ذخیره سؤالات بازیابی'}
+                      </button>
+                    </div>
+
                     {/* 1. RECOVERY EMAIL & OTP VERIFICATION SETTINGS */}
                     <div className="p-6 rounded-3xl bg-slate-950/90 border border-slate-800 shadow-2xl space-y-5">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -4765,16 +4923,35 @@ export const AdminPanel = () => {
 
                         <span
                           className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                            adminSecurity?.isEmailVerified
+                            (backend?.available ? serverAccountInfo?.emailVerified : adminSecurity?.isEmailVerified)
                               ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                               : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                           }`}
                         >
-                          {adminSecurity?.isEmailVerified ? 'ایمیل تایید شده ✅' : 'در انتظار تایید ⚠️'}
+                          {(backend?.available ? serverAccountInfo?.emailVerified : adminSecurity?.isEmailVerified) ? 'ایمیل تایید شده ✅' : 'در انتظار تایید ⚠️'}
                         </span>
                       </div>
 
                       <div className="space-y-4">
+                        {backend?.available && serverAccountInfo?.recoveryEmail && (
+                          <p className="text-[11px] text-slate-400 font-mono" dir="ltr">
+                            Server recovery email: <span className="text-cyan-300">{serverAccountInfo.recoveryEmail}</span>
+                          </p>
+                        )}
+                        {backend?.available && (
+                          <div>
+                            <label className="block text-xs font-bold text-white mb-1.5">
+                              رمز عبور فعلی (برای تغییر ایمیل، الزامی):
+                            </label>
+                            <input
+                              type="password"
+                              value={securityCurrentPw}
+                              onChange={(e) => setSecurityCurrentPw(e.target.value)}
+                              placeholder="رمز فعلی مدیر..."
+                              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+                            />
+                          </div>
+                        )}
                         <div>
                           <label className="block text-xs font-bold text-white mb-1.5">
                             آدرس ایمیل مدیر ارشد جهت دریافت کد بازیابی:
@@ -4838,18 +5015,28 @@ export const AdminPanel = () => {
                         <Key className="w-5 h-5 text-amber-400" />
                         <div>
                           <h4 className="text-sm sm:text-base font-bold text-white">تغییر کلمه عبور مدیر سیستم</h4>
-                          <p className="text-xs text-slate-400">کلمه عبور پیش‌فرض: admin</p>
+                          <p className="text-xs text-slate-400">حداقل ۸ کاراکتر • در حالت امن روی سرور هش می‌شود (bcrypt)</p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-white mb-1">رمز عبور فعلی:</label>
+                          <input
+                            type="password"
+                            value={currentPasswordInput}
+                            onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                            placeholder="رمز فعلی..."
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
                         <div>
                           <label className="block text-xs font-bold text-white mb-1">رمز عبور جدید:</label>
                           <input
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            placeholder="حداقل ۳ کاراکتر..."
+                            placeholder="حداقل ۸ کاراکتر..."
                             className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
                           />
                         </div>
@@ -4869,9 +5056,10 @@ export const AdminPanel = () => {
                         <button
                           type="button"
                           onClick={handleChangePasswordDirect}
-                          className="px-6 py-2.5 rounded-xl font-bold text-xs bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-md cursor-pointer transition-colors"
+                          disabled={isChangingPw}
+                          className={`px-6 py-2.5 rounded-xl font-bold text-xs bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-md transition-colors ${isChangingPw ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                         >
-                          ذخیره و تغییر رمز عبور
+                          {isChangingPw ? 'در حال ذخیره...' : 'ذخیره و تغییر رمز عبور'}
                         </button>
                       </div>
                     </div>

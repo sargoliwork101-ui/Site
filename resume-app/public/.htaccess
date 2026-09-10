@@ -64,3 +64,9 @@ DirectoryIndex index.html
 
 # Default Charset UTF-8
 AddDefaultCharset UTF-8
+
+# Defense in depth: never serve PHP secret stores, even if api/data/.htaccess
+# gets lost during upload. (Unanchored on purpose: works in subdirectories too.)
+<IfModule mod_alias.c>
+  RedirectMatch 403 /api/data/
+</IfModule>

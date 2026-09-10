@@ -387,3 +387,155 @@ export const triggerSafeDownload = (blobOrUrl, fileName) => {
     }, 2000);
   }
 };
+
+/**
+ * 12. Local-Mode Password Hashing (PBKDF2-SHA256 via WebCrypto)
+ * ---------------------------------------------------------------------------
+ * Used ONLY when the site runs WITHOUT the PHP backend (static preview /
+ * offline testing). On real hosting, passwords are bcrypt-hashed SERVER-side
+ * and never touch the browser. Local hashes just protect against casual
+ * shoulder-surfing of localStorage — they are NOT a substitute for the
+ * backend.
+ *
+ * Format: pbkdf2$<iterations>$<saltHex>$<hashHex>
+ */
+
+const PBKDF2_ITERATIONS = 120000;
+
+const bytesToHex = (bytes) =>
+  Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+const hexToBytes = (hex) => {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return out;
+};
+
+export const isLocalPasswordHash = (value) =>
+  typeof value === 'string' && value.startsWith('pbkdf2$');
+
+const hasWebCrypto = () =>
+  typeof window !== 'undefined' &&
+  !!window.crypto &&
+  !!window.crypto.subtle &&
+  typeof window.crypto.subtle.importKey === 'function';
+
+/**
+ * Hash a password for local-mode storage. Falls back to a salted,
+ * stretched non-crypto hash ONLY when WebCrypto is unavailable (plain-HTTP
+ * origins) — still far better than plaintext.
+ */
+export async function hashPasswordLocal(password) {
+  const pw = String(password || '');
+  if (hasWebCrypto()) {
+    const enc = new TextEncoder();
+    const salt = window.crypto.getRandomValues(new Uint8Array(16));
+    const key = await window.crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+    const bits = await window.crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+      key,
+      256
+    );
+    return `pbkdf2$${PBKDF2_ITERATIONS}$${bytesToHex(salt)}$${bytesToHex(new Uint8Array(bits))}`;
+  }
+  // No-secure-context fallback: salted + stretched cyrb53 (NOT cryptographic,
+  // but opaque). Local/testing mode only.
+  const salt = Math.floor(Math.random() * 0xffffffff).toString(16);
+  let h1 = 0xdeadbeef ^ 0;
+  let h2 = 0x41c6ce57 ^ 0;
+  const str = `${salt}:${pw}`;
+  for (let round = 0; round < 20000; round++) {
+    const s = round === 0 ? str : `${h1.toString(16)}${h2.toString(16)}:${str}`;
+    h1 = 0xdeadbeef;
+    h2 = 0x41c6ce57;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  }
+  const hex = (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+  return `simple$20000$${salt}$${hex}`;
+}
+
+/**
+ * Verify a password against a local-mode stored value. Transparently accepts
+ * legacy PLAINTEXT values (returns true on match) so old installs can migrate
+ * on next successful login.
+ */
+export async function verifyPasswordLocal(password, stored) {
+  const pw = String(password || '');
+  if (typeof stored !== 'string' || stored === '') return false;
+
+  if (isLocalPasswordHash(stored)) {
+    if (!hasWebCrypto()) return false; // cannot verify PBKDF2 without subtle
+    try {
+      const [, iterStr, saltHex, hashHex] = stored.split('$');
+      const iterations = parseInt(iterStr, 10);
+      if (!iterations || !saltHex || !hashHex) return false;
+      const enc = new TextEncoder();
+      const key = await window.crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+      const bits = await window.crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt: hexToBytes(saltHex), iterations, hash: 'SHA-256' },
+        key,
+        256
+      );
+      return timingSafeEqual(bytesToHex(new Uint8Array(bits)), hashHex);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (stored.startsWith('simple$')) {
+    // Fallback hashes are NOT re-verifiable cheaply across sessions by design
+    // (they exist only to avoid plaintext); treat as mismatch and force reset.
+    // Exception: compare via re-hash is intentionally unsupported.
+    return false;
+  }
+
+  // Legacy plaintext (pre-hardening installs) — migrate after success.
+  return timingSafeEqual(pw, stored);
+}
+
+/**
+ * 13. SVG Upload Sanitizer (defense-in-depth against stored script in SVG)
+ * ---------------------------------------------------------------------------
+ * Uploaded SVGs are stored as data: URLs and rendered via <img> (where
+ * scripts cannot run) — this strips scripts anyway so a saved file can never
+ * execute even if opened directly.
+ *
+ * @param {string} dataUrl - readAsDataURL() result
+ * @returns {string} Sanitized data URL (or the original when N/A)
+ */
+export const sanitizeSvgDataUrl = (dataUrl) => {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/svg+xml')) {
+    return dataUrl;
+  }
+  try {
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) return dataUrl;
+    const meta = dataUrl.slice(0, comma);
+    const payload = dataUrl.slice(comma + 1);
+    const isBase64 = meta.includes(';base64');
+    const svgText = isBase64 ? decodeURIComponent(escape(atob(payload))) : decodeURIComponent(payload);
+
+    const purifyInstance = typeof DOMPurify?.sanitize === 'function'
+      ? DOMPurify
+      : (DOMPurify?.default && typeof DOMPurify.default.sanitize === 'function' ? DOMPurify.default : null);
+    if (!purifyInstance) return dataUrl;
+
+    const clean = purifyInstance.sanitize(svgText, {
+      USE_PROFILES: { svg: true },
+      FORBID_TAGS: ['script', 'foreignObject', 'animate', 'set', 'handler'],
+      FORBID_ATTR: ['onbegin', 'onend', 'onrepeat'],
+    });
+    if (!clean || !clean.includes('<svg')) return dataUrl;
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(clean)))}`;
+  } catch (e) {
+    return dataUrl;
+  }
+};

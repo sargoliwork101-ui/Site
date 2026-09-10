@@ -106,15 +106,18 @@ export const HeroSection = () => {
                   color: primaryColor,
                 }}
               >
-                <span className="w-2 h-2 rounded-full animate-ping" style={{ backgroundColor: primaryColor }} />
+                <span className="relative flex w-2 h-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: primaryColor }} />
+                  <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: primaryColor }} />
+                </span>
                 <span>{isFa ? info.statusTextFa : info.statusTextEn}</span>
               </div>
 
-              {/* Main Headline */}
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight text-white">
+              {/* Main Headline (FA: normal tracking + tall leading — tight/negative breaks Persian joins) */}
+              <h1 className={`text-3xl sm:text-5xl lg:text-6xl font-black text-white text-balance break-words ${isFa ? 'tracking-normal leading-[1.9]' : 'tracking-tight leading-tight'}`}>
                 {isFa ? info.fullNameFa : info.fullNameEn}
                 <span
-                  className="block mt-2 text-2xl sm:text-3xl lg:text-4xl font-extrabold"
+                  className={`block mt-2 pb-1 text-2xl sm:text-3xl lg:text-4xl font-extrabold break-words ${isFa ? 'tracking-normal leading-[1.9]' : 'tracking-tight'}`}
                   style={{
                     background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor}, #ffffff)`,
                     WebkitBackgroundClip: 'text',
@@ -127,7 +130,7 @@ export const HeroSection = () => {
 
               {/* Dynamic Typing Title */}
               <div
-                className="h-8 flex items-center justify-center lg:justify-start gap-2 font-mono text-sm sm:text-base font-semibold"
+                className={`min-h-[2rem] flex items-center justify-center lg:justify-start gap-2 text-sm sm:text-base font-semibold leading-relaxed ${isFa ? 'font-vazir' : 'font-mono'}`}
                 style={{ color: primaryColor }}
               >
                 <span className="opacity-70">&gt;</span>
@@ -361,12 +364,12 @@ export const HeroSection = () => {
               <span>{isFa ? info.statusTextFa : info.statusTextEn}</span>
             </div>
 
-            <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight">
+            <h1 className={`text-4xl sm:text-6xl font-black text-white text-balance break-words ${isFa ? 'tracking-normal leading-[1.9]' : 'tracking-tight leading-tight'}`}>
               {isFa ? info.fullNameFa : info.fullNameEn}
             </h1>
 
             <p
-              className="text-xl sm:text-2xl font-bold"
+              className={`text-xl sm:text-2xl font-bold break-words ${isFa ? 'tracking-normal leading-[1.9] pb-1' : 'tracking-tight'}`}
               style={{
                 background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
                 WebkitBackgroundClip: 'text',

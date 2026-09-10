@@ -39,11 +39,17 @@ export const AdminLoginModal = () => {
     requestPasswordResetOtp,
     verifyPasswordResetOtp,
     resetPasswordWithOtp,
+    setupServerAccount,
+    verifyServerSetupOtp,
+    skipServerSetupVerify,
+    emergencyLocalReset,
+    getLocalSecQaQuestions,
+    backend,
     adminSecurity,
     data
   } = useData();
 
-  // Modal Views: 'login' | 'forgot_email' | 'forgot_otp' | 'forgot_new_pass'
+  // Modal Views: 'login' | 'setup' | 'setup_otp' | 'forgot_email' | 'forgot_otp' | 'forgot_new_pass'
   const [view, setView] = useState('login');
 
   // Input states (clean production defaults)
@@ -60,6 +66,16 @@ export const AdminLoginModal = () => {
   const [error, setError] = useState('');
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [resendTimer, setResendTimer] = useState(0);
+  // Server round-trip busy flag + first-run setup + local emergency states.
+  // (No on-screen OTP fallback: codes live ONLY in server memory + inbox.)
+  const [isBusy, setIsBusy] = useState(false);
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupPassword2, setSetupPassword2] = useState('');
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupMailError, setSetupMailError] = useState(false);
+  const [showEmergency, setShowEmergency] = useState(false);
+  const [secQuestions, setSecQuestions] = useState([]);
+  const [secAnswers, setSecAnswers] = useState(['', '', '']);
 
   const isFa = data?.siteConfig?.language === 'fa';
 
@@ -70,9 +86,17 @@ export const AdminLoginModal = () => {
       setUsernameInput('');
       setPassword('');
       setError('');
-      setFallbackOtp('');
-      setOtpNotice('');
-      setIsSendingOtp(false);
+      setIsBusy(false);
+      setOtpInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      setSetupPassword('');
+      setSetupPassword2('');
+      setSetupEmail(adminSecurity?.recoveryEmail || data?.personalInfo?.email || '');
+      setSetupMailError(false);
+      setShowEmergency(false);
+      setSecQuestions([]);
+      setSecAnswers(['', '', '']);
       setEmailInput(adminSecurity?.recoveryEmail || data?.personalInfo?.email || '');
     }
   }, [isLoginModalOpen, adminSecurity?.recoveryEmail, data?.personalInfo?.email]);
@@ -106,10 +130,10 @@ export const AdminLoginModal = () => {
 
   if (!isLoginModalOpen) return null;
 
-  // --- 1. Multi-User Login Handler ---
-  const handleLoginSubmit = (e) => {
+  // --- 1. Multi-User Login Handler (REAL server check for master admin) ---
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (cooldownSeconds > 0) return;
+    if (cooldownSeconds > 0 || isBusy) return;
 
     if (!usernameInput.trim()) {
       setError(isFa ? 'لطفاً نام کاربری را وارد فرمایید.' : 'Please enter your username.');
@@ -121,60 +145,184 @@ export const AdminLoginModal = () => {
       return;
     }
 
-    const result = loginUser(usernameInput, password);
-    if (!result.success) {
-      setError(
-        isFa
-          ? 'نام کاربری یا رمز عبور وارد شده نادرست است.'
-          : 'Incorrect username or password provided.'
-      );
-      const remaining = loginRateLimiter.getRemainingCooldownSeconds();
-      setCooldownSeconds(remaining);
-    } else {
-      setError('');
+    setIsBusy(true);
+    setError('');
+    try {
+      const result = await loginUser(usernameInput, password);
+      if (!result.success) {
+        if (result.error === 'setup_required') {
+          // First run on real hosting → jump to the secure setup wizard.
+          setView('setup');
+          setError('');
+          return;
+        }
+        setError(
+          isFa
+            ? 'نام کاربری یا رمز عبور وارد شده نادرست است.'
+            : 'Incorrect username or password provided.'
+        );
+        const remaining = loginRateLimiter.getRemainingCooldownSeconds();
+        setCooldownSeconds(remaining);
+      } else {
+        setError('');
+      }
+    } finally {
+      setIsBusy(false);
     }
   };
 
-  // --- 2. Forgot Password: Request OTP ---
-  const handleForgotEmailSubmit = (e) => {
+  // --- 1B. First-Run SERVER Setup: master password + recovery email + OTP ---
+  const handleSetupSubmit = async (e) => {
     e.preventDefault();
+    if (isBusy) return;
+    if (!setupPassword || setupPassword.length < 8) {
+      setError(isFa ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.');
+      return;
+    }
+    if (setupPassword !== setupPassword2) {
+      setError(isFa ? 'تکرار رمز عبور مطابقت ندارد.' : 'Passwords do not match.');
+      return;
+    }
+    if (!validateEmail(setupEmail)) {
+      setError(isFa ? 'لطفاً یک ایمیل معتبر وارد فرمایید.' : 'Please enter a valid email address.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    setSetupMailError(false);
+    try {
+      const res = await setupServerAccount(setupPassword, setupEmail);
+      if (res.success) {
+        if (res.emailSent) {
+          setResendTimer(60);
+          setView('setup_otp');
+        } else {
+          // Account created, but mail() failed → offer the skip hatch.
+          setSetupMailError(true);
+        }
+      } else if (res.error === 'already_setup') {
+        setView('login');
+      }
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleSetupOtpSubmit = async (e) => {
+    e.preventDefault();
+    if (isBusy) return;
+    if (!otpInput || otpInput.trim().length !== 6) {
+      setError(isFa ? 'کد تایید باید ۶ رقمی باشد.' : 'OTP code must be 6 digits.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    try {
+      await verifyServerSetupOtp(otpInput); // closes modal + logs in on success
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleSkipSetupVerify = async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      await skipServerSetupVerify(); // closes modal + logs in (unverified)
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  // --- 2. Forgot Password: Request OTP (REAL server-issued code) ---
+  const handleForgotEmailSubmit = async (e) => {
+    e.preventDefault();
+    if (isBusy) return;
     if (!validateEmail(emailInput)) {
       setError(isFa ? 'لطفاً یک آدرس ایمیل معتبر وارد فرمایید.' : 'Please enter a valid email address.');
       return;
     }
 
-    const res = requestPasswordResetOtp(emailInput);
-    if (res.success) {
-      setError('');
-      setResendTimer(60);
-      setView('forgot_otp');
-    } else {
-      setError(isFa ? 'این ایمیل با ایمیل بازیابی ثبت‌شده در سیستم مطابقت ندارد.' : 'Email does not match registered admin email.');
+    setIsBusy(true);
+    setError('');
+    try {
+      const res = await requestPasswordResetOtp(emailInput);
+      if (res.success) {
+        setResendTimer(Math.max(60, res.retryAfter || 0));
+        setView('forgot_otp');
+      } else if (res.error === 'no_backend') {
+        // Honest local mode: no email channel exists here.
+        setShowEmergency(true);
+        try { setSecQuestions(getLocalSecQaQuestions() || []); } catch { setSecQuestions([]); }
+        setSecAnswers(['', '', '']);
+        setError(
+          isFa
+            ? 'در حالت محلی (بدون بک‌اند) ارسال ایمیل ممکن نیست. از ریست اضطراری زیر استفاده کنید.'
+            : 'Local mode has no email channel. Use the emergency reset below.'
+        );
+      } else if (res.error !== 'rate_limit' && res.error !== 'invalid_email') {
+        // Generic on purpose (anti-enumeration): never reveal registered emails.
+        setError(isFa ? 'اگر این ایمیل ثبت شده باشد، کد تایید ارسال شد.' : 'If registered, a code was sent.');
+      }
+    } finally {
+      setIsBusy(false);
     }
   };
 
-  // --- 3. Forgot Password: Verify OTP ---
-  const handleForgotOtpSubmit = (e) => {
+  // LOCAL-MODE ONLY recovery, gated by the recovery answers set in the panel.
+  const handleEmergencyReset = async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    setError('');
+    try {
+      const ok = await emergencyLocalReset(secAnswers);
+      if (ok) {
+        setShowEmergency(false);
+        setView('login');
+        setUsernameInput('admin');
+        setPassword('');
+        setError(isFa ? 'رمز ریست شد (admin). وارد شوید و فوراً عوضش کنید.' : 'Reset to admin. Log in and change it now.');
+      } else {
+        setError(
+          secQuestions.length < 2
+            ? (isFa ? 'سؤالات بازیابی هنوز در پنل (بخش امنیت) ثبت نشده‌اند — ریست قفل است.' : 'Recovery questions are not set in the panel (Security tab) — reset is locked.')
+            : (isFa ? 'جواب‌ها درست نیست. دوباره تلاش کنید.' : 'Wrong answers. Try again.')
+        );
+      }
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  // --- 3. Forgot Password: Verify OTP (server issues single-use token) ---
+  const handleForgotOtpSubmit = async (e) => {
     e.preventDefault();
+    if (isBusy) return;
     if (!otpInput || otpInput.trim().length !== 6) {
       setError(isFa ? 'کد تایید باید ۶ رقمی باشد.' : 'OTP code must be 6 digits.');
       return;
     }
 
-    const valid = verifyPasswordResetOtp(otpInput);
-    if (valid) {
-      setError('');
-      setView('forgot_new_pass');
-    } else {
-      setError(isFa ? 'کد تایید وارد شده نادرست یا منقضی شده است.' : 'Invalid or expired verification code.');
+    setIsBusy(true);
+    setError('');
+    try {
+      const valid = await verifyPasswordResetOtp(emailInput, otpInput);
+      if (valid) {
+        setView('forgot_new_pass');
+      } else {
+        setError(isFa ? 'کد تایید وارد شده نادرست یا منقضی شده است.' : 'Invalid or expired verification code.');
+      }
+    } finally {
+      setIsBusy(false);
     }
   };
 
-  // --- 4. Forgot Password: Save New Password ---
-  const handleNewPasswordSubmit = (e) => {
+  // --- 4. Forgot Password: Save New Password (bcrypt, server-side) ---
+  const handleNewPasswordSubmit = async (e) => {
     e.preventDefault();
-    if (newPasswordInput.length < 3) {
-      setError(isFa ? 'رمز عبور جدید باید حداقل ۳ کاراکتر باشد.' : 'Password must be at least 3 characters.');
+    if (isBusy) return;
+    if (newPasswordInput.length < 8) {
+      setError(isFa ? 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.');
       return;
     }
     if (newPasswordInput !== confirmPasswordInput) {
@@ -182,9 +330,15 @@ export const AdminLoginModal = () => {
       return;
     }
 
-    const success = resetPasswordWithOtp(otpInput, newPasswordInput);
-    if (!success) {
-      setError(isFa ? 'خطا در ثبت رمز عبور جدید.' : 'Failed to reset password.');
+    setIsBusy(true);
+    setError('');
+    try {
+      const success = await resetPasswordWithOtp(newPasswordInput);
+      if (!success) {
+        setError(isFa ? 'خطا در ثبت رمز عبور جدید.' : 'Failed to reset password.');
+      }
+    } finally {
+      setIsBusy(false);
     }
   };
 
@@ -220,6 +374,33 @@ export const AdminLoginModal = () => {
                   : 'Enter your credentials to access the management workspace.'}
               </p>
             </div>
+
+            {/* Security-mode pill (honest: server vs local) */}
+            <div className="flex justify-center">
+              {backend?.checked && backend.available ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  {isFa ? '🔒 حالت امن (احراز هویت سرور)' : '🔒 Secure mode (server auth)'}
+                </span>
+              ) : backend?.checked ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/40">
+                  {isFa ? '🖥️ حالت محلی (پیش‌نمایش / تست)' : '🖥️ Local mode (preview/testing)'}
+                </span>
+              ) : null}
+            </div>
+
+            {/* First-run setup prompt (real hosting, account not created yet) */}
+            {backend?.checked && backend.available && !backend.setupDone && (
+              <button
+                type="button"
+                onClick={() => { setView('setup'); setError(''); }}
+                className="w-full p-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-center transition-colors cursor-pointer"
+              >
+                <span className="text-xs font-bold text-amber-300">
+                  {isFa ? '⚙️ راه‌اندازی اولیه: ساخت رمز مدیر و ایمیل بازیابی' : '⚙️ First-time setup: create admin password'}
+                </span>
+              </button>
+            )}
 
             {/* Rate Limiting Shield */}
             {cooldownSeconds > 0 && (
@@ -311,14 +492,193 @@ export const AdminLoginModal = () => {
 
               <button
                 type="submit"
-                disabled={cooldownSeconds > 0}
-                className="w-full py-3.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                disabled={cooldownSeconds > 0 || isBusy}
+                className="w-full py-3.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-wait cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>{isFa ? 'احراز هویت و ورود به پنل' : 'Authenticate & Enter'}</span>
+                <span>{isBusy ? (isFa ? 'در حال بررسی...' : 'Checking...') : (isFa ? 'احراز هویت و ورود به پنل' : 'Authenticate & Enter')}</span>
               </button>
             </form>
           </>
+        )}
+
+        {/* ================================================================= */}
+        {/* VIEW SETUP: FIRST-RUN MASTER ACCOUNT (server-side, bcrypt)        */}
+        {/* ================================================================= */}
+        {view === 'setup' && (
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-bold text-white">
+                {isFa ? 'راه‌اندازی اولیه پنل مدیریت' : 'First-Time Admin Setup'}
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {isFa
+                  ? 'رمز عبور مدیر ارشد و ایمیل بازیابی را تعیین کنید. رمز به‌صورت امن روی سرور ذخیره می‌شود.'
+                  : 'Create the master password and recovery email. Stored securely on the server.'}
+              </p>
+            </div>
+
+            {backend?.checked && !backend.mailAvailable && (
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-[11px] text-amber-300 leading-relaxed">
+                {isFa
+                  ? '⚠️ ارسال ایمیل (PHP mail) روی این هاست غیرفعال است. می‌توانید بدون تایید ایمیل وارد شوید و بعداً از بخش امنیت اقدام کنید.'
+                  : '⚠️ Email sending (PHP mail) is disabled on this host. You may enter without verification and fix it later.'}
+              </div>
+            )}
+
+            <form onSubmit={handleSetupSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  {isFa ? 'رمز عبور مدیر (حداقل ۸ کاراکتر):' : 'Admin password (min 8 chars):'}
+                </label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={setupPassword}
+                  onChange={(e) => { setSetupPassword(e.target.value); setError(''); }}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  {isFa ? 'تکرار رمز عبور:' : 'Repeat password:'}
+                </label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={setupPassword2}
+                  onChange={(e) => { setSetupPassword2(e.target.value); setError(''); }}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  {isFa ? 'ایمیل بازیابی:' : 'Recovery email:'}
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={setupEmail}
+                    onChange={(e) => { setSetupEmail(e.target.value); setError(''); }}
+                    placeholder="admin@example.com"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono text-xs"
+                  />
+                </div>
+                {error && (
+                  <p className="text-xs text-rose-400 mt-1.5 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{error}</span>
+                  </p>
+                )}
+              </div>
+
+              {setupMailError && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/40 space-y-2.5">
+                  <p className="text-[11px] text-rose-300 leading-relaxed">
+                    {isFa
+                      ? '❌ حساب ساخته شد اما ایمیل تایید ارسال نشد (اختلال PHP mail هاست). می‌توانید بدون تایید وارد شوید و بعداً از بخش «امنیت و رمز عبور» ایمیل را تایید کنید.'
+                      : '❌ Account created but the email failed (host PHP mail issue). You may enter unverified and verify later.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSkipSetupVerify}
+                    disabled={isBusy}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isBusy ? (isFa ? 'در حال ورود...' : 'Entering...') : (isFa ? 'ورود بدون تایید ایمیل' : 'Enter without verification')}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setView('login'); setError(''); }}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  {isFa ? 'بازگشت به صفحه ورود' : 'Back to Login'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isBusy}
+                  className={`px-5 py-2.5 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg flex items-center gap-1.5 ${isBusy ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
+                >
+                  <span>{isBusy ? (isFa ? 'در حال ساخت...' : 'Creating...') : (isFa ? 'ساخت حساب + ارسال کد' : 'Create + Send Code')}</span>
+                  {isFa ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* VIEW SETUP-OTP: VERIFY RECOVERY EMAIL                             */}
+        {/* ================================================================= */}
+        {view === 'setup_otp' && (
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg">
+                <Mail className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-bold text-white">
+                {isFa ? 'تایید ایمیل بازیابی' : 'Verify Recovery Email'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {isFa
+                  ? `کد ۶ رقمی ارسال شده به ${setupEmail} را وارد کنید.`
+                  : `Enter the 6-digit code sent to ${setupEmail}`}
+              </p>
+            </div>
+
+            <form onSubmit={handleSetupOtpSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  {isFa ? 'کد تایید ۶ رقمی:' : '6-Digit Code:'}
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otpInput}
+                  onChange={(e) => { setOtpInput(e.target.value.replace(/\D/g, '')); setError(''); }}
+                  placeholder="123456"
+                  className="w-full py-3 rounded-xl bg-slate-950 border border-slate-800 text-emerald-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono text-center tracking-widest text-2xl font-bold"
+                />
+                {error && (
+                  <p className="text-xs text-rose-400 mt-1.5 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{error}</span>
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={isBusy}
+                className={`w-full py-3.5 rounded-xl font-bold text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 ${isBusy ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isBusy ? (isFa ? 'در حال تایید...' : 'Verifying...') : (isFa ? 'تایید و ورود به پنل' : 'Verify & Enter')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSkipSetupVerify}
+                disabled={isBusy}
+                className="w-full text-xs text-slate-400 hover:text-white disabled:opacity-50 cursor-pointer"
+              >
+                {isFa ? 'ایمیل نمی‌رسد؟ ورود بدون تایید' : 'No email? Enter without verification'}
+              </button>
+            </form>
+          </div>
         )}
 
         {/* ================================================================= */}
@@ -378,14 +738,55 @@ export const AdminLoginModal = () => {
 
                 <button
                   type="submit"
-                  disabled={isSendingOtp}
-                  className={`px-5 py-2.5 rounded-xl font-bold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-lg flex items-center gap-1.5 ${isSendingOtp ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
+                  disabled={isBusy}
+                  className={`px-5 py-2.5 rounded-xl font-bold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-lg flex items-center gap-1.5 ${isBusy ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                 >
-                  <span>{isSendingOtp ? (isFa ? 'در حال ارسال...' : 'Sending...') : (isFa ? 'دریافت کد تایید' : 'Send Reset Code')}</span>
+                  <span>{isBusy ? (isFa ? 'در حال ارسال...' : 'Sending...') : (isFa ? 'دریافت کد تایید' : 'Send Reset Code')}</span>
                   {isFa ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </form>
+
+            {/* LOCAL-MODE ONLY emergency reset (physical access to THIS browser) */}
+            {showEmergency && !backend?.available && (
+              <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/40 space-y-2.5 animate-fadeIn">
+                <p className="text-[11px] text-rose-300 leading-relaxed">
+                  {isFa
+                    ? '🖥️ حالت محلی است و ایمیلی ارسال نمی‌شود. برای ریست رمز، به سؤالات بازیابی (ثبت‌شده در پنل ← امنیت) پاسخ دهید:'
+                    : '🖥️ Local mode: no email channel. Answer the recovery questions (set in Panel → Security) to reset:'}
+                </p>
+                {secQuestions.length < 2 ? (
+                  <p className="text-[11px] font-bold text-amber-300 leading-relaxed">
+                    {isFa
+                      ? '⚠️ سؤالات بازیابی هنوز ثبت نشده‌اند؛ ریست اضطراری قفل است. (پس از ورود از بخش امنیت ثبتشان کنید.)'
+                      : '⚠️ Recovery questions are not set yet; emergency reset is locked. (Set them in Security after login.)'}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {secQuestions.slice(0, 3).map((q, i) => (
+                      <div key={i}>
+                        <label className="block text-[11px] font-bold text-rose-200 mb-1">{q}</label>
+                        <input
+                          type="text"
+                          value={secAnswers[i] || ''}
+                          onChange={(e) => setSecAnswers((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))}
+                          placeholder={isFa ? 'پاسخ...' : 'Answer...'}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-rose-500/40 text-xs text-white focus:outline-none focus:border-rose-400"
+                        />
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleEmergencyReset}
+                      disabled={isBusy || secQuestions.slice(0, 3).some((_, i) => !(secAnswers[i] || '').trim())}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {isBusy ? (isFa ? 'در حال بررسی...' : 'Checking...') : (isFa ? 'ریست رمز با جواب‌ها' : 'Reset with answers')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -432,27 +833,12 @@ export const AdminLoginModal = () => {
                 )}
               </div>
 
-              {/* Fallback: shown ONLY when real email delivery failed */}
-              {fallbackOtp && (
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-center space-y-1.5 animate-fadeIn">
-                  <p className="text-[11px] text-amber-300 leading-relaxed">
-                    {isFa
-                      ? 'ارسال ایمیل ناموفق بود؛ کد تایید شما (۵ دقیقه اعتبار دارد):'
-                      : 'Email delivery failed; your verification code (valid 5 min):'}
-                  </p>
-                  <p className="font-mono text-2xl font-black tracking-[0.35em] text-amber-200 select-all" dir="ltr">
-                    {fallbackOtp}
-                  </p>
-                </div>
-              )}
-
-              {otpNotice === 'activation' && (
-                <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-[11px] text-sky-300 leading-relaxed">
-                  {isFa
-                    ? '💡 اولین ارسال به این ایمیل نیاز به فعال‌سازی دارد: ایمیل «Activate your form» را در اینباکس یا پوشه اسپم تایید کنید، سپس «ارسال مجدد کد» را بزنید.'
-                    : '💡 First-time delivery needs activation: confirm the "Activate your form" email in your inbox/spam, then press Resend.'}
-                </div>
-              )}
+              {/* Inbox hint (the code ONLY exists in server memory + your inbox) */}
+              <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 leading-relaxed">
+                {isFa
+                  ? '💡 کد فقط به ایمیل شما ارسال شده و هیچ‌جای دیگری نمایش داده نمی‌شود. اگر نیامد، پوشه اسپم را هم بررسی کنید.'
+                  : '💡 The code was sent to your inbox only. Check spam if missing.'}
+              </div>
 
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <button
@@ -471,19 +857,20 @@ export const AdminLoginModal = () => {
                   <button
                     type="button"
                     onClick={handleForgotEmailSubmit}
-                    disabled={isSendingOtp}
-                    className={`font-semibold ${isSendingOtp ? 'text-slate-500 cursor-wait' : 'text-cyan-400 hover:text-cyan-300 cursor-pointer'}`}
+                    disabled={isBusy}
+                    className={`font-semibold ${isBusy ? 'text-slate-500 cursor-wait' : 'text-cyan-400 hover:text-cyan-300 cursor-pointer'}`}
                   >
-                    {isSendingOtp ? (isFa ? 'در حال ارسال...' : 'Sending...') : (isFa ? 'ارسال مجدد کد' : 'Resend Code')}
+                    {isBusy ? (isFa ? 'در حال ارسال...' : 'Sending...') : (isFa ? 'ارسال مجدد کد' : 'Resend Code')}
                   </button>
                 )}
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl font-bold text-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isBusy}
+                className={`w-full py-3.5 rounded-xl font-bold text-sm bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 ${isBusy ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
               >
-                <span>{isFa ? 'تایید کد و تغییر رمز' : 'Verify & Continue'}</span>
+                <span>{isBusy ? (isFa ? 'در حال تایید...' : 'Verifying...') : (isFa ? 'تایید کد و تغییر رمز' : 'Verify & Continue')}</span>
                 {isFa ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
               </button>
             </form>
@@ -561,10 +948,11 @@ export const AdminLoginModal = () => {
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl font-bold text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isBusy}
+                className={`w-full py-3.5 rounded-xl font-bold text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-lg flex items-center justify-center gap-2 ${isBusy ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{isFa ? 'ذخیره رمز جدید و ورود به پنل' : 'Save Password & Enter'}</span>
+                <span>{isBusy ? (isFa ? 'در حال ذخیره...' : 'Saving...') : (isFa ? 'ذخیره رمز جدید و ورود به پنل' : 'Save Password & Enter')}</span>
               </button>
             </form>
           </div>

@@ -36,6 +36,7 @@ import {
   Code2,
   Trash2
 } from 'lucide-react';
+import { sanitizeSvgDataUrl, sanitizeText, validateUploadFile } from '../../utils/security';
 
 export const RichTextEditorModal = ({
   isOpen,
@@ -173,7 +174,7 @@ export const RichTextEditorModal = ({
       reader.onload = (event) => {
         const text = event.target?.result;
         if (editorRef.current) {
-          editorRef.current.innerHTML = `<pre style="white-space: pre-wrap;">${text}</pre>`;
+          editorRef.current.innerHTML = `<pre style="white-space: pre-wrap;">${sanitizeText(text)}</pre>`;
           handleContentChange();
         } else {
           setContent(text);
@@ -189,10 +190,17 @@ export const RichTextEditorModal = ({
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const validation = validateUploadFile(file, { maxSizeMB: 5 });
+    if (!validation.valid) {
+      window.alert(validation.error || 'Invalid image file.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
-      const base64 = event.target?.result;
-      const imgHtml = `<img src="${base64}" alt="${file.name}" style="max-width: 100%; border-radius: 12px; margin: 16px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" />`;
+      const base64 = sanitizeSvgDataUrl(event.target?.result);
+      const safeAlt = sanitizeText(file.name).replace(/["'`]/g, '');
+      const imgHtml = `<img src="${base64}" alt="${safeAlt}" style="max-width: 100%; border-radius: 12px; margin: 16px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" />`;
       if (editorRef.current) {
         editorRef.current.focus();
         document.execCommand('insertHTML', false, imgHtml);

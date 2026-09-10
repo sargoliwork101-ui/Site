@@ -16,6 +16,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { formatNum } from '../../utils/numberHelper';
+import { sanitizeRichHtml } from '../../utils/security';
 import {
   X,
   Search,
@@ -436,9 +437,12 @@ export const BlogModal = () => {
               <div
                 className="prose prose-invert max-w-none text-slate-300 text-sm sm:text-base leading-relaxed space-y-4"
                 dangerouslySetInnerHTML={{
-                  __html: isFa
-                    ? (selectedBlogPost.contentFa || selectedBlogPost.contentMarkdownFa || '<p>محتوای این مقاله در حال آماده‌سازی است.</p>')
-                    : (selectedBlogPost.contentEn || selectedBlogPost.contentMarkdownEn || selectedBlogPost.contentFa || '<p>Content in preparation.</p>')
+                  // SECURITY: blog HTML is ALWAYS purified (stored-XSS defense)
+                  __html: sanitizeRichHtml(
+                    isFa
+                      ? (selectedBlogPost.contentFa || selectedBlogPost.contentMarkdownFa || '<p>محتوای این مقاله در حال آماده‌سازی است.</p>')
+                      : (selectedBlogPost.contentEn || selectedBlogPost.contentMarkdownEn || selectedBlogPost.contentFa || '<p>Content in preparation.</p>')
+                  )
                 }}
               />
 

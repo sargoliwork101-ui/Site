@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://your-domain.ir/sitemap.xml
+Sitemap: https://arashtaheri.dev/sitemap.xml

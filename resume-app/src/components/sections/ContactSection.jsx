@@ -17,9 +17,10 @@ import {
 } from 'lucide-react';
 import { Github, Linkedin } from '../common/BrandIcons';
 import { sanitizeText, validateEmail, contactRateLimiter, triggerSafeDownload } from '../../utils/security';
+import { serverContact } from '../../utils/serverAuth';
 
 export const ContactSection = () => {
-  const { data, currentTemplate, addMessage, showToast, adminSecurity } = useData();
+  const { data, currentTemplate, addMessage, showToast, adminSecurity, backend } = useData();
   const info = data?.personalInfo || {};
   const isFa = data?.siteConfig?.language === 'fa';
   const primaryColor = currentTemplate?.colors?.primary || '#00ffcc';
@@ -95,27 +96,49 @@ export const ContactSection = () => {
       message: cleanMessage,
     });
 
-    // 2. Dispatch real transactional email to Admin's registered email
-    try {
-      fetch(`https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          _subject: `⚡ پیام جدید از سایت پورتفولیو: ${cleanSubject}`,
-          'نام فرستنده': cleanName,
-          'ایمیل فرستنده': cleanEmail,
-          'سازمان / شرکت': cleanCompany || 'شخصی',
-          'موضوع': cleanSubject,
-          'متن پیام': cleanMessage,
-          _template: 'table',
-        }),
-      }).catch((err) => {
-        console.warn('Background email dispatch error:', err);
-      });
-    } catch (e) {}
+    // 2. Email the admin: prefer OUR OWN server (private + reliable),
+    // fall back to the FormSubmit relay only without a backend.
+    // (Contact messages only — OTP codes NEVER go through third parties.)
+    const dispatchEmail = async () => {
+      if (backend?.available) {
+        try {
+          const r = await serverContact({
+            name: cleanName,
+            email: cleanEmail,
+            company: cleanCompany,
+            subject: cleanSubject,
+            message: cleanMessage,
+            website_bot_trap: '',
+          });
+          if (r && r.ok) return; // delivered by our own host
+          console.warn('Server mail failed, trying fallback:', r && r.error);
+        } catch (err) {
+          console.warn('Server mail error, trying fallback:', err);
+        }
+      }
+      try {
+        await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            _subject: `⚡ پیام جدید از سایت پورتفولیو: ${cleanSubject}`,
+            'نام فرستنده': cleanName,
+            'ایمیل فرستنده': cleanEmail,
+            'سازمان / شرکت': cleanCompany || 'شخصی',
+            'موضوع': cleanSubject,
+            'متن پیام': cleanMessage,
+            _template: 'table',
+            _captcha: 'false',
+          }),
+        });
+      } catch (err) {
+        console.warn('Fallback email dispatch error:', err);
+      }
+    };
+    dispatchEmail();
 
     setTimeout(async () => {
       setIsSubmitting(false);

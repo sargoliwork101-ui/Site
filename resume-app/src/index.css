@@ -12,6 +12,30 @@
     font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
+  /* Layout safety: absolute decorations must never cause horizontal scroll */
+  html, body {
+    overflow-x: clip;
+  }
+
+  /* Persian-safe typography: negative letter-spacing breaks Arabic-script
+     joins and tight leading clips tall glyphs (گ چ پ ژ) — neutralize both
+     whenever the page language is Persian. English styling stays untouched. */
+  html[lang="fa"] .tracking-tight,
+  html[lang="fa"] .tracking-tighter {
+    letter-spacing: 0 !important;
+  }
+  html[lang="fa"] h1.leading-tight,
+  html[lang="fa"] h2.leading-tight,
+  html[lang="fa"] h3.leading-tight,
+  html[lang="fa"] h4.leading-tight {
+    line-height: 1.9 !important;
+  }
+  html[lang="fa"] h1,
+  html[lang="fa"] h2 {
+    text-wrap: balance;
+    overflow-wrap: break-word;
+  }
+
   /* Protect images & 3D canvases against right-click dragging & download saving */
   img, canvas, .protected-media {
     -webkit-touch-callout: none;

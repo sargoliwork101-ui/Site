@@ -27,11 +27,26 @@ import {
   loginRateLimiter,
   contactRateLimiter,
   otpRateLimiter,
-  timingSafeEqual,
   triggerSafeDownload,
-  generateSecureOtp
+  hashPasswordLocal,
+  verifyPasswordLocal,
+  isLocalPasswordHash
 } from '../utils/security';
-import { sendOtpEmail } from '../utils/emailHelper';
+import {
+  fetchServerStatus,
+  serverSetup,
+  serverVerifySetupOtp,
+  serverSkipSetupVerify,
+  serverLogin,
+  serverLogout,
+  serverRequestOtp,
+  serverVerifyOtp,
+  serverResetPassword,
+  serverChangePassword,
+  serverRequestEmailChange,
+  serverConfirmEmailChange,
+  serverAccount
+} from '../utils/serverAuth';
 
 const DataContext = createContext(null);
 
@@ -40,6 +55,19 @@ const STORAGE_KEY = 'embedded_portfolio_data_v2';
 const SNAPSHOTS_KEY = 'embedded_portfolio_snapshots_v2';
 const AUTH_KEY = 'embedded_admin_auth_token';
 const ADMIN_PASSWORD_KEY = 'embedded_admin_pwd';
+
+// SECURITY: the login flag + current user live in sessionStorage (cleared when
+// the tab closes) — never in persistent localStorage. On real hosting the
+// server-side PHP session is the source of truth; this is only a UI mirror.
+const sessionGet = (k) => {
+  try { return sessionStorage.getItem(k); } catch (e) { return null; }
+};
+const sessionSet = (k, v) => {
+  try { sessionStorage.setItem(k, v); } catch (e) { /* private mode */ }
+};
+const sessionDel = (k) => {
+  try { sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
+};
 const ADMIN_SECURITY_KEY = 'embedded_admin_security_v3';
 const USERS_KEY = 'embedded_portfolio_users_v3';
 const CURRENT_USER_KEY = 'embedded_portfolio_current_user_v3';
@@ -448,7 +476,13 @@ export const DataProvider = ({ children }) => {
     try {
       const saved = localStorage.getItem(ADMIN_SECURITY_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // SECURITY: OTP material is NEVER restored from storage (memory-only).
+        if (parsed && typeof parsed === 'object') {
+          parsed.activeOtp = null;
+          parsed.otpExpiresAt = null;
+          return parsed;
+        }
       }
     } catch (e) {
       console.error('Failed to parse admin security', e);
@@ -495,23 +529,20 @@ export const DataProvider = ({ children }) => {
   // Currently Authenticated User Profile
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const saved = localStorage.getItem(CURRENT_USER_KEY);
+      const saved = sessionGet(CURRENT_USER_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
       }
     } catch (e) {
       console.error('Failed to parse current user', e);
     }
-    const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
-    if (isAuth) {
-      return DEFAULT_USERS[0];
-    }
     return null;
   });
 
-  // Authentication State
+  // Authentication State (tab-scoped; server session is truth on real hosting)
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem(AUTH_KEY) === 'true';
+    return sessionGet(AUTH_KEY) === 'true';
   });
 
   // Active Modals state
@@ -675,10 +706,14 @@ export const DataProvider = ({ children }) => {
     }
   }, [snapshots]);
 
-  // Persist admin security
+  // Persist admin security — WITHOUT secrets (no OTP, no plaintext password).
+  // Passwords live hashed in `users`; OTP/reset tokens live server-side or in
+  // memory only. This blocks localStorage theft from yielding credentials.
   useEffect(() => {
     try {
-      localStorage.setItem(ADMIN_SECURITY_KEY, JSON.stringify(adminSecurity));
+      const { activeOtp, otpExpiresAt, password, ...safe } = adminSecurity || {};
+      void activeOtp; void otpExpiresAt; void password;
+      localStorage.setItem(ADMIN_SECURITY_KEY, JSON.stringify(safe));
     } catch (e) {
       console.error('Failed to persist admin security', e);
     }
@@ -693,16 +728,14 @@ export const DataProvider = ({ children }) => {
     }
   }, [users]);
 
-  // Persist Current User
+  // Persist Current User (tab-scoped session only — see AUTH_KEY note)
   useEffect(() => {
-    try {
-      if (currentUser) {
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem(CURRENT_USER_KEY);
-      }
-    } catch (e) {
-      console.error('Failed to persist current user', e);
+    if (currentUser) {
+      const { password, ...safeUser } = currentUser;
+      void password;
+      sessionSet(CURRENT_USER_KEY, JSON.stringify(safeUser));
+    } else {
+      sessionDel(CURRENT_USER_KEY);
     }
   }, [currentUser]);
 
@@ -1266,15 +1299,162 @@ export const DataProvider = ({ children }) => {
   };
 
   // --------------------------------------------------------------------------
+  // 12B. REAL BACKEND (PHP) STATE + LOCAL PASSWORD MIGRATION
+  // --------------------------------------------------------------------------
+  // Security model:
+  // - ON REAL HOSTING (api/ available): master auth, OTP, reset tokens and
+  //   rate limits are enforced SERVER-side (bcrypt, HttpOnly sessions). The
+  //   browser only mirrors the session flag. OTP codes NEVER touch the
+  //   browser/localStorage — they exist only in server memory + the inbox.
+  // - WITHOUT backend (static preview / offline): clearly-labeled LOCAL mode.
+  //   Passwords are PBKDF2-hashed, OTP email is unavailable (honest notice +
+  //   physical-access emergency reset instead of fake "test codes").
+  const [backend, setBackend] = useState({
+    checked: false,
+    available: false,
+    setupDone: false,
+    authenticated: false,
+    mailAvailable: false,
+    emailVerified: false,
+  });
+  const [serverAccountInfo, setServerAccountInfo] = useState({ recoveryEmail: '', emailVerified: false });
+  const [serverResetToken, setServerResetToken] = useState(null); // memory-only, single-use
+
+  const faStamp = () => {
+    try {
+      return new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) + ' (هم‌اکنون)';
+    } catch (e) {
+      return 'هم‌اکنون';
+    }
+  };
+
+  // Local UI mirror of an authenticated session (server OR local login)
+  const applyLocalAuth = (user) => {
+    const stamped = { ...user, lastLogin: faStamp() };
+    setCurrentUser(stamped);
+    setIsAuthenticated(true);
+    sessionSet(AUTH_KEY, 'true');
+    setIsLoginModalOpen(false);
+    setIsAdminOpen(true);
+    return stamped;
+  };
+
+  const clearLocalAuth = () => {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setIsAdminOpen(false);
+    sessionDel(AUTH_KEY);
+    sessionDel(CURRENT_USER_KEY);
+  };
+
+  const refreshBackend = async () => {
+    const s = await fetchServerStatus();
+    const next = { checked: true, ...s };
+    setBackend(next);
+    if (next.available) {
+      if (next.authenticated) {
+        // Server session alive → mirror locally (admin profile shell)
+        const adminUser = (users || []).find((u) => u.username === 'admin') || DEFAULT_USERS[0];
+        setCurrentUser((prev) => (prev && prev.username === 'admin' ? prev : { ...adminUser, lastLogin: faStamp() }));
+        setIsAuthenticated(true);
+        sessionSet(AUTH_KEY, 'true');
+        try {
+          const acc = await serverAccount();
+          if (acc && acc.ok) {
+            setServerAccountInfo({
+              recoveryEmail: acc.recoveryEmail || '',
+              emailVerified: acc.emailVerified === true,
+            });
+          }
+        } catch (e) { /* non-fatal */ }
+      } else {
+        // Backend exists but no server session → drop any stale local flag
+        // for the server-gated master account (no local bypass, ever).
+        setCurrentUser((prev) => {
+          if (!prev || prev.username === 'admin') {
+            setIsAuthenticated(false);
+            sessionDel(AUTH_KEY);
+            sessionDel(CURRENT_USER_KEY);
+            return null;
+          }
+          return prev;
+        });
+      }
+    }
+    return next;
+  };
+
+  // Factory-default password verdict (computed from PRE-migration values once)
+  const [localPwIsDefault, setLocalPwIsDefault] = useState(() => {
+    try {
+      const raw = localStorage.getItem(USERS_KEY);
+      if (!raw) return true; // fresh install → default 'admin'
+      const list = JSON.parse(raw);
+      const a = Array.isArray(list) ? list.find((u) => u && u.username === 'admin') : null;
+      const pw = a ? a.password : 'admin';
+      return pw === 'admin' || pw === '' || pw === '123456';
+    } catch (e) {
+      return true;
+    }
+  });
+  const isDefaultPassword = backend.available ? !backend.setupDone : localPwIsDefault;
+
+  // One-time hardening on boot:
+  //  1. Probe the real backend (if any) and sync the session mirror.
+  //  2. Delete legacy PERSISTENT auth flags (a clean re-login is required once).
+  //  3. Hash every plaintext local password (PBKDF2) and blank legacy copies.
+  useEffect(() => {
+    try {
+      localStorage.removeItem(AUTH_KEY);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      localStorage.removeItem(ADMIN_PASSWORD_KEY);
+    } catch (e) { /* ignore */ }
+    refreshBackend();
+    (async () => {
+      try {
+        const current = users || [];
+        let changed = false;
+        const nextUsers = await Promise.all(current.map(async (u) => {
+          if (u && typeof u.password === 'string' && u.password !== '' && !isLocalPasswordHash(u.password)) {
+            changed = true;
+            return { ...u, password: await hashPasswordLocal(u.password) };
+          }
+          return u;
+        }));
+        if (changed) setUsers(nextUsers);
+        setAdminSecurity((prev) => {
+          if (prev && typeof prev.password === 'string' && prev.password !== '') {
+            // Fold legacy master password into the admin user if still plaintext there.
+            hashPasswordLocal(prev.password).then((h) => {
+              setUsers((list) => (list || []).map((u) => (
+                u.username === 'admin' && !isLocalPasswordHash(u.password) ? { ...u, password: h } : u
+              )));
+            }).catch(() => {});
+            return { ...prev, password: '' };
+          }
+          return prev;
+        });
+      } catch (e) {
+        console.error('Password migration failed', e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --------------------------------------------------------------------------
   // 13. AUTHENTICATION & MULTI-USER RBAC MANAGEMENT
   // --------------------------------------------------------------------------
 
   /**
-   * Universal User Login with Username/Email & Password and Rate Limiting
+   * Universal User Login (REAL when backend is available).
+   * - Master `admin` on real hosting → verified SERVER-side (bcrypt + session).
+   *   Local password copies are IGNORED there: no bypass, ever.
+   * - Other workspace users (RBAC profiles) → local PBKDF2-hashed check.
+   * - Without backend (preview/offline): everything local, clearly labeled.
    * @param {string} usernameOrEmail - Username or Email
    * @param {string} password - Input security password
    */
-  const loginUser = (usernameOrEmail, password) => {
+  const loginUser = async (usernameOrEmail, password) => {
     if (!loginRateLimiter.canAttempt()) {
       const remainingSec = loginRateLimiter.getRemainingCooldownSeconds();
       showToast(`به دلیل تلاش‌های ناموفق متعدد، ورود به مدت ${remainingSec} ثانیه مسدود است.`, 'error');
@@ -1283,25 +1463,35 @@ export const DataProvider = ({ children }) => {
 
     const inputIdentifier = (usernameOrEmail || '').trim().toLowerCase();
     const inputPassword = (password || '').trim();
+    const wantsAdmin = !inputIdentifier || inputIdentifier === 'admin';
 
-    // Default fast-track for testing: password 'admin' without identifier or with 'admin'
-    if ((!inputIdentifier || inputIdentifier === 'admin') && (inputPassword === 'admin' || timingSafeEqual(inputPassword, adminSecurity.password || 'admin'))) {
+    // --- REAL PATH: master admin verified by the server (bcrypt + session) ---
+    if (backend.available && backend.setupDone && wantsAdmin) {
+      const r = await serverLogin('admin', inputPassword);
+      if (!r.ok) {
+        loginRateLimiter.recordAttempt();
+        showToast(
+          r.error === 'rate_limit'
+            ? `ورود موقتاً مسدود است. ${r.retryAfter || 60} ثانیه دیگر تلاش کنید.`
+            : 'نام کاربری یا رمز عبور وارد شده نادرست است!',
+          'error'
+        );
+        return { success: false, error: r.error || 'invalid_credentials' };
+      }
       loginRateLimiter.reset();
+      await refreshBackend();
       const adminUser = users.find((u) => u.username === 'admin') || DEFAULT_USERS[0];
-      const updatedAdmin = {
-        ...adminUser,
-        lastLogin: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) + ' (هم‌اکنون)'
-      };
-      
-      setCurrentUser(updatedAdmin);
-      setIsAuthenticated(true);
-      localStorage.setItem(AUTH_KEY, 'true');
-      setIsLoginModalOpen(false);
-      setIsAdminOpen(true);
-      showToast(`خوش آمدید! ورود موفق به عنوان ${updatedAdmin.nameFa} (${ROLE_DEFINITIONS.super_admin.labelFa})`);
-      return { success: true, user: updatedAdmin };
+      const stamped = applyLocalAuth(adminUser);
+      showToast(`خوش آمدید! ورود امن (سرور) به عنوان ${stamped.nameFa} (${ROLE_DEFINITIONS.super_admin.labelFa})`);
+      return { success: true, user: stamped, viaServer: true };
     }
 
+    // Backend exists but owner hasn't run first-time setup yet.
+    if (backend.available && !backend.setupDone && wantsAdmin) {
+      return { success: false, error: 'setup_required' };
+    }
+
+    // --- LOCAL PATH: workspace users / offline-preview mode ---
     // Match by username or email
     const targetUser = users.find(
       (u) => (u.username && u.username.toLowerCase() === inputIdentifier) ||
@@ -1319,8 +1509,8 @@ export const DataProvider = ({ children }) => {
       return { success: false, error: 'user_inactive' };
     }
 
-    const isPasswordMatch = timingSafeEqual(inputPassword, targetUser.password) ||
-      (targetUser.username === 'admin' && inputPassword === 'admin');
+    // PBKDF2 verify (transparently accepts legacy plaintext once, then migrates)
+    const isPasswordMatch = await verifyPasswordLocal(inputPassword, targetUser.password);
 
     if (!isPasswordMatch) {
       loginRateLimiter.recordAttempt();
@@ -1328,23 +1518,26 @@ export const DataProvider = ({ children }) => {
       return { success: false, error: 'invalid_credentials' };
     }
 
-    // Successful login
-    loginRateLimiter.reset();
-    const updatedUser = {
-      ...targetUser,
-      lastLogin: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) + ' (هم‌اکنون)'
-    };
+    // Migrate legacy plaintext → hash on successful login
+    if (!isLocalPasswordHash(targetUser.password)) {
+      try {
+        const h = await hashPasswordLocal(inputPassword);
+        setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? { ...u, password: h } : u)));
+      } catch (e) { /* non-fatal */ }
+    }
 
-    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-    setCurrentUser(updatedUser);
-    setIsAuthenticated(true);
-    localStorage.setItem(AUTH_KEY, 'true');
-    setIsLoginModalOpen(false);
-    setIsAdminOpen(true);
-    
-    const roleLabel = ROLE_DEFINITIONS[updatedUser.role]?.labelFa || 'کاربر سیستم';
-    showToast(`ورود موفق: خوش آمدید ${updatedUser.nameFa} (${roleLabel})`);
-    return { success: true, user: updatedUser };
+    // Successful LOCAL login
+    loginRateLimiter.reset();
+    const stamped = applyLocalAuth(targetUser);
+    setUsers((prev) => prev.map((u) => (u.id === stamped.id ? stamped : u)));
+
+    const roleLabel = ROLE_DEFINITIONS[stamped.role]?.labelFa || 'کاربر سیستم';
+    showToast(
+      backend.available
+        ? `ورود موفق (نقش محلی): ${stamped.nameFa} (${roleLabel})`
+        : `ورود موفق [حالت محلی]: خوش آمدید ${stamped.nameFa} (${roleLabel})`
+    );
+    return { success: true, user: stamped, viaServer: false };
   };
 
   /**
@@ -1355,14 +1548,15 @@ export const DataProvider = ({ children }) => {
   };
 
   /**
-   * Universal Logout
+   * Universal Logout (destroys the SERVER session too when backend exists)
    */
-  const logoutUser = () => {
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-    setIsAdminOpen(false);
-    localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem(CURRENT_USER_KEY);
+  const logoutUser = async () => {
+    if (backend.available) {
+      try { await serverLogout(); } catch (e) { /* non-fatal */ }
+    }
+    clearLocalAuth();
+    setServerResetToken(null);
+    try { await refreshBackend(); } catch (e) { /* non-fatal */ }
     showToast('شما با موفقیت از پنل مدیریت خارج شدید.');
   };
 
@@ -1371,7 +1565,7 @@ export const DataProvider = ({ children }) => {
   /**
    * Add a new User with Role and Granular Permissions
    */
-  const addUser = (userData) => {
+  const addUser = async (userData) => {
     const cleanUsername = sanitizeText(userData.username).toLowerCase().replace(/\s+/g, '');
     if (!cleanUsername) {
       showToast('نام کاربری الزامی است.', 'error');
@@ -1381,6 +1575,12 @@ export const DataProvider = ({ children }) => {
       showToast('این نام کاربری قبلاً در سیستم ثبت شده است.', 'error');
       return false;
     }
+    const rawPw = (userData.password || '').trim();
+    if (rawPw.length < 8) {
+      showToast('رمز عبور کاربر باید حداقل ۸ کاراکتر باشد.', 'error');
+      return false;
+    }
+    const hashedPw = await hashPasswordLocal(rawPw);
 
     const role = userData.role || 'editor';
     const roleDef = ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS.editor;
@@ -1391,7 +1591,7 @@ export const DataProvider = ({ children }) => {
     const newUser = {
       id: `user-${Date.now()}`,
       username: cleanUsername,
-      password: (userData.password || '123456').trim(),
+      password: hashedPw, // PBKDF2 hash — never plaintext (local mode)
       nameFa: sanitizeText(userData.nameFa) || cleanUsername,
       nameEn: sanitizeText(userData.nameEn) || cleanUsername,
       email: sanitizeText(userData.email) || `${cleanUsername}@system.local`,
@@ -1412,23 +1612,34 @@ export const DataProvider = ({ children }) => {
   /**
    * Update User details, role, status or permissions
    */
-  const updateUser = (userId, updatedFields) => {
+  const updateUser = async (userId, updatedFields) => {
+    // Hash a changed password (PBKDF2) — never store/overwrite plaintext.
+    const fields = { ...(updatedFields || {}) };
+    if (!fields.password) delete fields.password; // edit without pw change → keep old
+    if (fields.password && !isLocalPasswordHash(fields.password)) {
+      const rawPw = String(fields.password).trim();
+      if (rawPw.length < 8) {
+        showToast('رمز عبور کاربر باید حداقل ۸ کاراکتر باشد.', 'error');
+        return false;
+      }
+      fields.password = await hashPasswordLocal(rawPw);
+    }
     setUsers((prev) => {
       return prev.map((u) => {
         if (u.id === userId) {
-          const newRole = updatedFields.role || u.role;
+          const newRole = fields.role || u.role;
           const roleDef = ROLE_DEFINITIONS[newRole] || ROLE_DEFINITIONS.editor;
           let newPermissions = u.permissions;
 
-          if (updatedFields.permissions) {
-            newPermissions = { ...updatedFields.permissions };
+          if (fields.permissions) {
+            newPermissions = { ...fields.permissions };
           } else if (newRole !== u.role && newRole !== 'custom') {
             newPermissions = { ...roleDef.defaultPermissions };
           }
 
           const modUser = {
             ...u,
-            ...updatedFields,
+            ...fields,
             role: newRole,
             permissions: newPermissions,
             avatar: roleDef.icon || u.avatar,
@@ -1475,7 +1686,7 @@ export const DataProvider = ({ children }) => {
     if (!target) return false;
     setCurrentUser(target);
     setIsAuthenticated(true);
-    localStorage.setItem(AUTH_KEY, 'true');
+    sessionSet(AUTH_KEY, 'true');
     showToast(`تغییر سریع به کاربر «${target.nameFa}» (${ROLE_DEFINITIONS[target.role]?.labelFa})`);
     return true;
   };
@@ -1494,19 +1705,22 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
 
   /**
-   * Request 6-digit OTP code for Password Reset (REAL email delivery).
-   * The code is generated locally, stored with a 5-minute expiry, and then
-   * actually emailed to the registered recovery address via FormSubmit AJAX.
-   * If delivery fails (network / first-time activation), the code is returned
-   * so the UI can display it as a fallback — the admin is never locked out.
-   * @param {string} email - Registered admin recovery email
-   * @returns {Promise<{success: boolean, emailSent?: boolean, needsActivation?: boolean, otp?: string, email?: string, expiresAt?: number, error?: string}>}
+   * Request a password-reset OTP. REAL server flow: the code is generated,
+   * stored (bcrypt-hashed) and mailed SERVER-side. The response is
+   * intentionally generic — it never reveals whether the email is registered
+   * (anti-enumeration). The code NEVER touches the browser/localStorage.
+   * @param {string} email - Recovery email to send the code to
+   * @returns {Promise<{success: boolean, email?: string, retryAfter?: number, error?: string}>}
    */
   const requestPasswordResetOtp = async (email) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     if (!validateEmail(cleanEmail)) {
       showToast('لطفاً یک ایمیل معتبر وارد نمایید.', 'error');
       return { success: false, error: 'invalid_email' };
+    }
+    if (!backend.available) {
+      // Honest local mode: email is impossible without a backend.
+      return { success: false, error: 'no_backend' };
     }
 
     if (!otpRateLimiter.canAttempt()) {
@@ -1516,225 +1730,315 @@ export const DataProvider = ({ children }) => {
     }
     otpRateLimiter.recordAttempt();
 
-    const registeredEmail = (adminSecurity.recoveryEmail || initialData.personalInfo?.email || '').trim().toLowerCase();
-
-    // Check if email matches registered recovery email or contact email
-    const isMatchedEmail = cleanEmail === registeredEmail || cleanEmail === (data.personalInfo?.email || '').trim().toLowerCase();
-
-    if (!isMatchedEmail) {
-      showToast('این ایمیل با ایمیل بازیابی ثبت‌شده در سیستم مطابقت ندارد!', 'error');
-      return { success: false, error: 'email_not_found' };
+    const r = await serverRequestOtp(cleanEmail);
+    if (!r.ok) {
+      showToast(
+        r.error === 'rate_limit'
+          ? `درخواست زیاد است. ${r.retryAfter || 60} ثانیه دیگر تلاش کنید.`
+          : 'خطای شبکه. اتصال اینترنت را بررسی کنید.',
+        'error'
+      );
+      return { success: false, error: r.error || 'network' };
     }
-
-    // Generate cryptographic 6-digit OTP code (valid for 5 minutes)
-    const otp = generateSecureOtp(6);
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-
-    setAdminSecurity((prev) => ({
-      ...prev,
-      activeOtp: otp,
-      otpExpiresAt: expiresAt,
-    }));
-
-    // Deliver the code by REAL email (async, with timeout + fallback)
-    const delivery = await sendOtpEmail({ to: cleanEmail, otp, purpose: 'reset' });
-
-    if (delivery.sent) {
-      showToast(`کد تایید ۶ رقمی به ایمیل ${cleanEmail} ارسال شد. (۵ دقیقه اعتبار دارد)`);
-      return { success: true, emailSent: true, email: cleanEmail, expiresAt };
-    }
-
-    if (delivery.needsActivation) {
-      showToast('اولین ارسال به این ایمیل نیاز به فعال‌سازی دارد! ایمیل «Activate your form» را در اینباکس یا اسپم خود تایید کنید و دوباره کد بگیرید.', 'error');
-      return { success: true, emailSent: false, needsActivation: true, otp, email: cleanEmail, expiresAt };
-    }
-
-    showToast('ارسال ایمیل ناموفق بود (اختلال شبکه؟)؛ کد تایید پایین فرم نمایش داده شد.', 'error');
-    return { success: true, emailSent: false, otp, email: cleanEmail, expiresAt };
+    return { success: true, email: cleanEmail, retryAfter: r.retryAfter || 0 };
   };
 
   /**
-   * Verify Password Reset OTP
-   * @param {string} otp - 6-digit OTP code
-   * @returns {boolean} True if OTP is valid and non-expired
+   * Verify the emailed OTP with the SERVER. On success a single-use reset
+   * token is kept IN MEMORY (never in any storage) for the final step.
+   * @param {string} email - Recovery email the code was sent to
+   * @param {string} otp - 6-digit OTP code from the inbox
+   * @returns {Promise<boolean>} True when the token was issued
    */
-  const verifyPasswordResetOtp = (otp) => {
-    const cleanOtp = (otp || '').trim();
-    if (!adminSecurity.activeOtp || !adminSecurity.otpExpiresAt) {
-      showToast('کد تایید منقضی شده یا درخواستی ثبت نشده است.', 'error');
+  const verifyPasswordResetOtp = async (email, otp) => {
+    if (!backend.available) return false;
+    const cleanOtp = String(otp || '').trim();
+    if (cleanOtp.length !== 6) {
+      showToast('کد تایید باید ۶ رقمی باشد.', 'error');
       return false;
     }
-
-    if (Date.now() > adminSecurity.otpExpiresAt) {
-      showToast('کد تایید منقضی شده است. لطفاً کد جدید درخواست نمایید.', 'error');
+    const r = await serverVerifyOtp(email, cleanOtp);
+    if (!r.ok || !r.resetToken) {
+      showToast(
+        r.error === 'expired' ? 'کد تایید منقضی شده است. کد جدید درخواست کنید.'
+        : r.error === 'locked' ? 'تعداد تلاش‌ها زیاد شد. کد جدید درخواست کنید.'
+        : r.error === 'rate_limit' ? 'درخواست زیاد است. کمی بعد تلاش کنید.'
+        : 'کد تایید وارد شده نادرست است.',
+        'error'
+      );
       return false;
     }
-
-    const isValid = timingSafeEqual(cleanOtp, adminSecurity.activeOtp);
-    if (!isValid) {
-      showToast('کد تایید وارد شده نادرست است.', 'error');
-      return false;
-    }
-
+    setServerResetToken(r.resetToken);
     return true;
   };
 
   /**
-   * Reset Admin Password with Verified OTP
-   * @param {string} otp - 6-digit OTP code
-   * @param {string} newPassword - New password
-   * @returns {boolean} True if password was reset
+   * Consume the in-memory reset token and set the new master password
+   * (bcrypt-hashed SERVER-side), then log in via a fresh server session.
+   * @param {string} newPassword - New password (min 8 chars)
+   * @returns {Promise<boolean>} True if password was reset
    */
-  const resetPasswordWithOtp = (otp, newPassword) => {
-    if (!verifyPasswordResetOtp(otp)) {
-      return false;
-    }
-
+  const resetPasswordWithOtp = async (newPassword) => {
+    if (!backend.available || !serverResetToken) return false;
     const trimmedPw = (newPassword || '').trim();
-    if (trimmedPw.length < 3) {
-      showToast('رمز عبور جدید باید حداقل ۳ کاراکتر باشد.', 'error');
+    if (trimmedPw.length < 8) {
+      showToast('رمز عبور جدید باید حداقل ۸ کاراکتر باشد.', 'error');
       return false;
     }
-
-    setAdminSecurity((prev) => ({
-      ...prev,
-      password: trimmedPw,
-      isEmailVerified: true,
-      activeOtp: null,
-      otpExpiresAt: null,
-    }));
-
-    // Update password on admin user object as well
-    setUsers((prev) =>
-      prev.map((u) => (u.username === 'admin' ? { ...u, password: trimmedPw } : u))
-    );
-
-    localStorage.setItem(ADMIN_PASSWORD_KEY, trimmedPw);
+    const r = await serverResetPassword(serverResetToken, trimmedPw);
+    setServerResetToken(null); // single-use: always drop after the attempt
+    if (!r.ok) {
+      showToast('توکن بازیابی نامعتبر یا منقضی است. از اول شروع کنید.', 'error');
+      return false;
+    }
     loginRateLimiter.reset();
-    setIsAuthenticated(true);
-    localStorage.setItem(AUTH_KEY, 'true');
-    setIsLoginModalOpen(false);
-    setIsAdminOpen(true);
+    await refreshBackend();
+    const adminUser = users.find((u) => u.username === 'admin') || DEFAULT_USERS[0];
+    applyLocalAuth(adminUser);
+    setLocalPwIsDefault(false);
     showToast('رمز عبور مدیر با موفقیت تغییر کرد و وارد پنل شدید.');
     return true;
   };
 
   /**
-   * Send Email Verification OTP (for First-time setup or changing email).
-   * REAL email delivery via FormSubmit AJAX; falls back to on-screen code
-   * if delivery fails so setup is never blocked.
-   * @param {string} email - Email to verify
-   * @returns {Promise<{success: boolean, emailSent?: boolean, needsActivation?: boolean, otp?: string, email?: string}>}
+   * Change the recovery email (panel context, already authed).
+   * SERVER mode: requires the current master password; an OTP is mailed to
+   * the NEW address and must be confirmed (proves inbox ownership).
+   * LOCAL mode: stored directly (no email channel exists) — labeled honestly.
+   * @param {string} password - Current master password (server mode)
+   * @param {string} newEmail - New recovery email
    */
-  const sendEmailVerificationOtp = async (email) => {
-    const cleanEmail = (email || '').trim().toLowerCase();
+  const requestRecoveryEmailChange = async (password, newEmail) => {
+    const cleanEmail = (newEmail || '').trim().toLowerCase();
     if (!validateEmail(cleanEmail)) {
       showToast('لطفاً یک ایمیل معتبر وارد نمایید.', 'error');
-      return { success: false };
+      return { success: false, error: 'invalid_email' };
     }
-
-    const otp = generateSecureOtp(6);
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-
-    setAdminSecurity((prev) => ({
-      ...prev,
-      recoveryEmail: cleanEmail,
-      activeOtp: otp,
-      otpExpiresAt: expiresAt,
-    }));
-
-    // Deliver the code by REAL email (async, with timeout + fallback)
-    const delivery = await sendOtpEmail({ to: cleanEmail, otp, purpose: 'verify' });
-
-    if (delivery.sent) {
-      showToast(`کد تایید فعال‌سازی به ${cleanEmail} ارسال شد. (۵ دقیقه اعتبار دارد)`);
-      return { success: true, emailSent: true, email: cleanEmail };
+    if (!backend.available) {
+      setAdminSecurity((prev) => ({ ...prev, recoveryEmail: cleanEmail, isEmailVerified: true }));
+      showToast('در حالت محلی، ایمیل بازیابی بدون تایید ایمیلی ذخیره شد.');
+      return { success: true, local: true, email: cleanEmail };
     }
-
-    if (delivery.needsActivation) {
-      showToast('اولین ارسال به این ایمیل نیاز به فعال‌سازی دارد! ایمیل «Activate your form» را در اینباکس یا اسپم خود تایید کنید و دوباره کد بگیرید.', 'error');
-      return { success: true, emailSent: false, needsActivation: true, otp, email: cleanEmail };
+    if (!otpRateLimiter.canAttempt()) {
+      showToast('درخواست زیاد است. کمی بعد تلاش کنید.', 'error');
+      return { success: false, error: 'rate_limit' };
     }
-
-    showToast('ارسال ایمیل ناموفق بود (اختلال شبکه؟)؛ کد تایید پایین فرم نمایش داده شد.', 'error');
-    return { success: true, emailSent: false, otp, email: cleanEmail };
+    otpRateLimiter.recordAttempt();
+    const r = await serverRequestEmailChange(password || '', cleanEmail);
+    if (!r.ok) {
+      showToast(
+        r.error === 'invalid_credentials' ? 'رمز عبور فعلی نادرست است.'
+        : r.error === 'rate_limit' ? 'درخواست زیاد است. کمی بعد تلاش کنید.'
+        : 'خطای شبکه. اتصال اینترنت را بررسی کنید.',
+        'error'
+      );
+      return { success: false, error: r.error || 'network' };
+    }
+    if (r.emailSent) {
+      showToast(`کد تایید به ${cleanEmail} ارسال شد. (۵ دقیقه اعتبار دارد)`);
+    } else {
+      showToast('ارسال ایمیل ناموفق بود! تنظیمات ایمیل هاست (PHP mail) را بررسی کنید.', 'error');
+    }
+    return { success: true, emailSent: r.emailSent === true, mailError: r.mailError || null, email: cleanEmail };
   };
 
   /**
-   * Confirm Email Verification (Completes first-time setup)
-   * @param {string} otp - 6-digit code
-   * @returns {boolean} True if confirmed
+   * Confirm the recovery-email change with the OTP mailed to the NEW address.
+   * @param {string} otp - 6-digit code from the new inbox
+   * @returns {Promise<boolean>} True when the email was switched
    */
-  const confirmEmailVerification = (otp) => {
-    if (!verifyPasswordResetOtp(otp)) {
+  const confirmRecoveryEmailChange = async (otp) => {
+    if (!backend.available) return true; // local mode stores directly (see above)
+    const cleanOtp = String(otp || '').trim();
+    if (cleanOtp.length !== 6) {
+      showToast('کد تایید باید ۶ رقمی باشد.', 'error');
       return false;
     }
-
+    const r = await serverConfirmEmailChange(cleanOtp);
+    if (!r.ok) {
+      showToast(
+        r.error === 'expired' ? 'کد تایید منقضی شده است. دوباره درخواست دهید.'
+        : r.error === 'locked' ? 'تعداد تلاش‌ها زیاد شد. دوباره درخواست دهید.'
+        : 'کد تایید وارد شده نادرست است.',
+        'error'
+      );
+      return false;
+    }
     setAdminSecurity((prev) => ({
       ...prev,
+      recoveryEmail: r.recoveryEmail || prev.recoveryEmail,
       isEmailVerified: true,
-      isFirstTimeSetupComplete: true,
-      activeOtp: null,
-      otpExpiresAt: null,
     }));
-
-    setIsAuthenticated(true);
-    localStorage.setItem(AUTH_KEY, 'true');
-    setIsLoginModalOpen(false);
-    setIsAdminOpen(true);
-    showToast('ایمیل بازیابی با موفقیت تایید و ذخیره گردید. به پنل خوش آمدید!');
+    setServerAccountInfo({ recoveryEmail: r.recoveryEmail || '', emailVerified: true });
+    showToast('ایمیل بازیابی با موفقیت تایید و ذخیره گردید.');
     return true;
   };
 
   /**
    * Change password directly from Admin Panel
    */
-  const changeAdminPassword = (newPassword) => {
+  /**
+   * Change the MASTER admin password (min 8 chars, current password required).
+   * SERVER mode: verified + bcrypt-hashed server-side. LOCAL mode: PBKDF2 hash.
+   */
+  const changeAdminPassword = async (currentPassword, newPassword) => {
     const trimmed = (newPassword || '').trim();
-    if (!trimmed || trimmed.length < 3) {
-      showToast('رمز عبور باید حداقل ۳ کاراکتر باشد.', 'error');
+    if (!trimmed || trimmed.length < 8) {
+      showToast('رمز عبور جدید باید حداقل ۸ کاراکتر باشد.', 'error');
       return false;
     }
-
-    setAdminSecurity((prev) => ({
-      ...prev,
-      password: trimmed,
-    }));
-
-    setUsers((prev) =>
-      prev.map((u) => (u.username === 'admin' ? { ...u, password: trimmed } : u))
-    );
-
-    localStorage.setItem(ADMIN_PASSWORD_KEY, trimmed);
+    if (backend.available) {
+      const r = await serverChangePassword(currentPassword || '', trimmed);
+      if (!r.ok) {
+        showToast(r.error === 'invalid_credentials' ? 'رمز عبور فعلی نادرست است.' : 'تغییر رمز ناموفق بود.', 'error');
+        return false;
+      }
+      await refreshBackend();
+      setLocalPwIsDefault(false);
+      showToast('رمز عبور پنل مدیریت با موفقیت تغییر یافت.');
+      return true;
+    }
+    // Local mode: verify the current password first (no silent takeover).
+    const adminUser = (users || []).find((u) => u.username === 'admin');
+    const okCurrent = adminUser ? await verifyPasswordLocal(currentPassword || '', adminUser.password) : false;
+    if (!okCurrent) {
+      showToast('رمز عبور فعلی نادرست است.', 'error');
+      return false;
+    }
+    const h = await hashPasswordLocal(trimmed);
+    setUsers((prev) => (prev || []).map((u) => (u.username === 'admin' ? { ...u, password: h } : u)));
+    setAdminSecurity((prev) => ({ ...prev, password: '' }));
+    setLocalPwIsDefault(false);
     showToast('رمز عبور پنل مدیریت با موفقیت تغییر یافت.');
     return true;
   };
 
   /**
-   * Update Recovery Email & Password from Admin Panel Settings
+   * Update the LOCAL recovery-email value (contact-form recipient / display).
+   * On real hosting the SERVER is the source of truth — use
+   * requestRecoveryEmailChange() instead. This only syncs the local mirror.
    */
-  const updateAdminRecoverySettings = (newEmail, newPassword = null) => {
+  const updateAdminRecoverySettings = (newEmail) => {
     const cleanEmail = (newEmail || '').trim().toLowerCase();
     if (!validateEmail(cleanEmail)) {
       showToast('ایمیل وارد شده نامعتبر است.', 'error');
       return false;
     }
+    setAdminSecurity((prev) => ({ ...prev, recoveryEmail: cleanEmail }));
+    showToast('ایمیل بازیابی (محلی) ذخیره شد.');
+    return true;
+  };
 
-    setAdminSecurity((prev) => ({
-      ...prev,
-      recoveryEmail: cleanEmail,
-      isEmailVerified: true,
-      password: newPassword ? newPassword.trim() : prev.password,
-    }));
-
-    if (newPassword) {
-      localStorage.setItem(ADMIN_PASSWORD_KEY, newPassword.trim());
-      setUsers((prev) =>
-        prev.map((u) => (u.username === 'admin' ? { ...u, password: newPassword.trim() } : u))
+  // --- First-run SERVER setup (master password + recovery email + OTP) ------
+  const setupServerAccount = async (password, recoveryEmail) => {
+    const r = await serverSetup(password, recoveryEmail);
+    if (!r.ok) {
+      showToast(
+        r.error === 'weak_password' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.'
+        : r.error === 'invalid_email' ? 'ایمیل وارد شده نامعتبر است.'
+        : r.error === 'already_setup' ? 'راه‌اندازی قبلاً انجام شده است.'
+        : r.error === 'rate_limit' ? 'درخواست زیاد است. کمی بعد تلاش کنید.'
+        : 'خطا در راه‌اندازی. دوباره تلاش کنید.',
+        'error'
       );
+      return { success: false, error: r.error };
     }
+    await refreshBackend();
+    return { success: true, emailSent: r.emailSent === true, mailError: r.mailError || null };
+  };
 
-    showToast('تنظیمات امنیتی و ایمیل بازیابی مدیر با موفقیت ذخیره شد.');
+  const verifyServerSetupOtp = async (otp) => {
+    const r = await serverVerifySetupOtp(otp);
+    if (!r.ok) {
+      showToast(r.error === 'expired' ? 'کد منقضی شده. دوباره راه‌اندازی کنید.' : 'کد تایید نادرست است.', 'error');
+      return false;
+    }
+    loginRateLimiter.reset();
+    await refreshBackend();
+    const adminUser = users.find((u) => u.username === 'admin') || DEFAULT_USERS[0];
+    applyLocalAuth(adminUser);
+    setLocalPwIsDefault(false);
+    showToast('راه‌اندازی کامل شد! ایمیل بازیابی تایید شد. خوش آمدید!');
+    return true;
+  };
+
+  const skipServerSetupVerify = async () => {
+    const r = await serverSkipSetupVerify();
+    if (!r.ok) {
+      showToast('خطا. دوباره تلاش کنید.', 'error');
+      return false;
+    }
+    loginRateLimiter.reset();
+    await refreshBackend();
+    const adminUser = users.find((u) => u.username === 'admin') || DEFAULT_USERS[0];
+    applyLocalAuth(adminUser);
+    setLocalPwIsDefault(false);
+    showToast('بدون تایید ایمیل وارد شدید. از بخش امنیت، ایمیل را تایید کنید.', 'error');
+    return true;
+  };
+
+  // --------------------------------------------------------------------------
+  // LOCAL RECOVERY QUESTIONS — the gate for the emergency local reset.
+  // Set once from the panel (Security tab). Answers are PBKDF2-hashed, so a
+  // stolen localStorage file does NOT reveal them. Questions are public text.
+  // --------------------------------------------------------------------------
+  const LOCAL_SECQA_KEY = 'resume_admin_secqa_v1';
+
+  const getLocalSecQaQuestions = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LOCAL_SECQA_KEY) || '[]');
+      return Array.isArray(raw) ? raw.map((r) => r.q).filter(Boolean) : [];
+    } catch { return []; }
+  };
+
+  const saveLocalSecQa = async (pairs) => {
+    const clean = (pairs || [])
+      .map((p) => ({ q: String(p.q || '').trim().slice(0, 120), a: String(p.a || '').trim() }))
+      .filter((p) => p.q && p.a.length >= 3);
+    if (clean.length < 2) return false;
+    const hashed = [];
+    for (const p of clean.slice(0, 3)) {
+      hashed.push({ q: p.q, h: await hashPasswordLocal(p.a.toLowerCase()) });
+    }
+    try {
+      localStorage.setItem(LOCAL_SECQA_KEY, JSON.stringify(hashed));
+      showToast('سؤالات بازیابی محلی ذخیره شد ✅');
+      return true;
+    } catch { return false; }
+  };
+
+  const verifyLocalSecQa = async (answers) => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LOCAL_SECQA_KEY) || '[]');
+      if (!Array.isArray(raw) || raw.length < 2) return false;
+      for (let i = 0; i < raw.length; i++) {
+        const given = String(answers?.[i] || '').trim().toLowerCase();
+        if (!given) return false;
+        if (!(await verifyPasswordLocal(given, raw[i].h))) return false;
+      }
+      return true;
+    } catch { return false; }
+  };
+
+  /**
+   * Emergency LOCAL password reset — REQUIRES the recovery answers chosen
+   * in the panel (Security tab). No answers set / wrong answers → locked.
+   * NEVER available when the backend exists (the server is the authority).
+   */
+  const emergencyLocalReset = async (answers) => {
+    if (backend.available) return false;
+    if (!(await verifyLocalSecQa(answers))) return false;
+    const h = await hashPasswordLocal('admin');
+    setUsers((prev) => {
+      const list = prev || [];
+      if (list.some((u) => u.username === 'admin')) {
+        return list.map((u) => (u.username === 'admin' ? { ...u, password: h, status: 'active' } : u));
+      }
+      return [...list, { ...DEFAULT_USERS[0], password: h }];
+    });
+    setAdminSecurity((prev) => ({ ...prev, password: '' }));
+    setLocalPwIsDefault(true);
+    showToast('رمز محلی ریست شد: admin (پس از ورود فوراً عوضش کنید!)');
     return true;
   };
 
@@ -1943,9 +2247,19 @@ export const DataProvider = ({ children }) => {
         requestPasswordResetOtp,
         verifyPasswordResetOtp,
         resetPasswordWithOtp,
-        sendEmailVerificationOtp,
-        confirmEmailVerification,
+        requestRecoveryEmailChange,
+        confirmRecoveryEmailChange,
         updateAdminRecoverySettings,
+        backend,
+        refreshBackend,
+        serverAccountInfo,
+        setupServerAccount,
+        verifyServerSetupOtp,
+        skipServerSetupVerify,
+        emergencyLocalReset,
+        getLocalSecQaQuestions,
+        saveLocalSecQa,
+        isDefaultPassword,
         createSnapshot,
         restoreSnapshot,
         deleteSnapshot,

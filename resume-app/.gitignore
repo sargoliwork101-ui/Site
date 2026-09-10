@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Runtime API secrets (created on the host, never commit)
+public/api/data/*.json
+public/api/data/*.tmp

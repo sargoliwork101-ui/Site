@@ -111,7 +111,7 @@ export const UserManagementSection = () => {
     setModalMode('edit');
     setEditingUserId(userItem.id);
     setUsername(userItem.username);
-    setPassword(userItem.password || '');
+    setPassword(''); // never prefill (hashes stay server-side-invisible); empty = keep old
     setNameFa(userItem.nameFa || '');
     setNameEn(userItem.nameEn || '');
     setEmail(userItem.email || '');
@@ -142,8 +142,8 @@ export const UserManagementSection = () => {
     }));
   };
 
-  // Submit Form (Add or Edit)
-  const handleFormSubmit = (e) => {
+  // Submit Form (Add or Edit) — async: passwords are PBKDF2-hashed
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
 
     if (!username.trim()) {
@@ -168,10 +168,10 @@ export const UserManagementSection = () => {
     };
 
     if (modalMode === 'add') {
-      const ok = addUser(payload);
+      const ok = await addUser(payload);
       if (ok) setIsModalOpen(false);
     } else {
-      const ok = updateUser(editingUserId, payload);
+      const ok = await updateUser(editingUserId, payload);
       if (ok) setIsModalOpen(false);
     }
   };
@@ -478,7 +478,7 @@ export const UserManagementSection = () => {
                       required={modalMode === 'add'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder={modalMode === 'edit' ? 'رمز قبلی محفوظ است...' : 'حداقل ۳ کاراکتر (مثال: admin)'}
+                      placeholder={modalMode === 'edit' ? 'خالی = بدون تغییر (حداقل ۸ کاراکتر برای رمز جدید)' : 'حداقل ۸ کاراکتر...'}
                       className="w-full px-9 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                     />
                     <button
