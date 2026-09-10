@@ -147,6 +147,17 @@ npm run build
 
        gzip on;
        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+       # Security headers (clickjacking / MIME-sniffing / referrer leaks)
+       add_header X-Frame-Options "SAMEORIGIN" always;
+       add_header X-Content-Type-Options "nosniff" always;
+       add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+       # NEVER serve PHP secret stores (nginx ignores .htaccess!)
+       location ^~ /api/data/ {
+           deny all;
+           return 403;
+       }
    }
    ```
 

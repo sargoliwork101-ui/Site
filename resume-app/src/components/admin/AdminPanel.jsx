@@ -35,7 +35,6 @@ import {
   Send,
   Eye,
   EyeOff,
-  Terminal,
   Globe,
   Sliders,
   Sparkles,
@@ -200,7 +199,6 @@ export const AdminPanel = () => {
   const [securityCurrentPw, setSecurityCurrentPw] = useState('');
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [isChangingPw, setIsChangingPw] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
   const [copiedBackup, setCopiedBackup] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState(null);
   const [newSnapshotName, setNewSnapshotName] = useState('');
@@ -220,7 +218,7 @@ export const AdminPanel = () => {
   const [isTaxonomyModalOpen, setIsTaxonomyModalOpen] = useState(false);
   const [taxonomyModalTab, setTaxonomyModalTab] = useState('boardCategories');
   const [expSubTab, setExpSubTab] = useState('experience'); // 'experience' | 'education' | 'certifications'
-  const [settingsSubTab, setSettingsSubTab] = useState('layout'); // 'layout' | 'design' | 'seo' | 'taxonomies' | 'backup' | 'iran-host' | 'security'
+  const [settingsSubTab, setSettingsSubTab] = useState('layout'); // 'layout' | 'design' | 'seo' | 'taxonomies' | 'backup' | 'security'
 
   const faviconInputRef = useRef(null);
   const [customFaviconUrl, setCustomFaviconUrl] = useState(
@@ -1040,43 +1038,6 @@ export const AdminPanel = () => {
     showToast('فایل اکسل پیام‌ها با موفقیت دانلود شد.');
   };
 
-  const copyNginxConfig = () => {
-    const config = `server {
-    listen 80;
-    server_name arashtaheri.dev www.arashtaheri.dev;
-    root /var/www/arashtaheri.dev/dist;
-    index index.html;
-
-    # Gzip Compression for Iran Network
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
-
-    # Security headers (clickjacking / MIME-sniffing / referrer leaks)
-    add_header X-Frame-Options \"SAMEORIGIN\" always;
-    add_header X-Content-Type-Options \"nosniff\" always;
-    add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;
-
-    # NEVER serve PHP secret stores (nginx ignores .htaccess!)
-    location ^~ /api/data/ {
-        deny all;
-        return 403;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Browser Cache
-    location ~* .(jpg|jpeg|png|gif|ico|css|js|woff2|svg)$ {
-        expires 365d;
-        add_header Cache-Control "public, no-transform";
-    }
-}`;
-    navigator.clipboard.writeText(config);
-    setCopiedCode(true);
-    showToast('کانفیگ Nginx در حافظه کپی شد.');
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
 
   const handleCopyClipboardBackup = async () => {
     const ok = await copyBackupToClipboard();
@@ -3997,7 +3958,6 @@ export const AdminPanel = () => {
                     { id: 'seo', label: 'استودیو سئو', icon: Search },
                     { id: 'taxonomies', label: 'دسته‌ها و گزینه‌ها', icon: Sliders },
                     { id: 'backup', label: 'پشتیبان‌گیری و دیتابیس', icon: Database },
-                    { id: 'iran-host', label: 'هاست ایران و دامنه .ir', icon: Server },
                     { id: 'security', label: 'امنیت و کلمه عبور', icon: ShieldCheck },
                   ].map((sub) => {
                     const Icon = sub.icon;
@@ -4851,96 +4811,6 @@ export const AdminPanel = () => {
                           </div>
                         ))}
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sub-tab 8: Iran Host & Deployment */}
-                {settingsSubTab === 'iran-host' && (
-                  <div className="space-y-6">
-                    <div className="p-6 rounded-2xl bg-slate-950/90 border border-cyan-500/30 space-y-3">
-                      <div className="flex items-center gap-2 text-cyan-400 font-bold text-base">
-                        <Server className="w-5 h-5" />
-                        <span>راهنمای استقرار روی هاست‌های ایرانی (cPanel / DirectAdmin)</span>
-                      </div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        این پروژه به صورت SPA و بدون نیاز به NodeJS در سمت سرور طراحی شده است و با تمامی هاست‌های اشتراکی لینوکسی ایران و خارج سازگار است.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-                        <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-mono font-bold text-xs">
-                          1
-                        </div>
-                        <h5 className="text-xs font-bold text-white">۱. دستور خروجی نهایی (Build)</h5>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          در خط فرمان سیستم خود دستور <code className="text-cyan-300 font-mono">npm run build</code> را اجرا فرمایید تا پوشه <code className="text-cyan-300 font-mono">dist/</code> تولید شود.
-                        </p>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-                        <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-mono font-bold text-xs">
-                          2
-                        </div>
-                        <h5 className="text-xs font-bold text-white">۲. آپلود در public_html</h5>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          محتویات داخل پوشه <code className="text-cyan-300 font-mono">dist/</code> را زیپ کرده و مستقیماً داخل <code className="text-cyan-300 font-mono">public_html</code> هاست لینوکس اکسترکت کنید.
-                        </p>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
-                        <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-mono font-bold text-xs">
-                          3
-                        </div>
-                        <h5 className="text-xs font-bold text-white">۳. فایل .htaccess فعال</h5>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          فایل <code className="text-emerald-300 font-mono">.htaccess</code> از پیش ساخته شده در پروژه قرار دارد که فشرده‌سازی Gzip و کش سریع را فعال می‌کند.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white flex items-center gap-2">
-                          <Terminal className="w-4 h-4 text-cyan-400" />
-                          <span>کانفیگ بهینه وب‌سرور NGINX (اختیاری):</span>
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={copyNginxConfig}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 cursor-pointer"
-                        >
-                          {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
-                          <span>{copiedCode ? 'کپی شد!' : 'کپی کانفیگ'}</span>
-                        </button>
-                      </div>
-
-                      <pre className="p-4 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-emerald-400 overflow-x-auto text-left leading-relaxed" dir="ltr">
-{`server {
-    listen 80;
-    server_name arashtaheri.dev www.arashtaheri.dev;
-    root /var/www/arashtaheri.dev/dist;
-    index index.html;
-
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
-
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-    location ^~ /api/data/ {
-        deny all;
-        return 403;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}`}
-                      </pre>
                     </div>
                   </div>
                 )}
