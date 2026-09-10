@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { RichTextEditorModal } from '../common/RichTextEditorModal';
-import { TaxonomyManager, TaxonomyManagerModal } from '../common/TaxonomyManager';
+import { TaxonomyManager } from '../common/TaxonomyManager';
 import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
 import { validateUploadFile, sanitizeSvgDataUrl } from '../../utils/security';
@@ -387,8 +387,7 @@ export const AdminPanel = () => {
   const backupFileInputRef = useRef(null);
   const docInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isTaxonomyModalOpen, setIsTaxonomyModalOpen] = useState(false);
-  const [taxonomyModalTab, setTaxonomyModalTab] = useState('boardCategories');
+  const [taxonomyFocus, setTaxonomyFocus] = useState(null);
   const [expSubTab, setExpSubTab] = useState('experience'); // 'experience' | 'education' | 'certifications'
   const [settingsSubTab, setSettingsSubTab] = useState('layout'); // 'layout' | 'design' | 'seo' | 'taxonomies' | 'backup' | 'security'
 
@@ -864,6 +863,32 @@ export const AdminPanel = () => {
     };
     reader.readAsText(file);
     if (backupFileInputRef.current) backupFileInputRef.current.value = '';
+  };
+
+  // Snapshot an open board/article form into its draft state before navigating
+  // away (e.g. jumping to taxonomy settings), so unsaved typed values survive.
+  const snapshotFormDraft = (formEl, setFormState) => {
+    if (!formEl) return;
+    const fd = new FormData(formEl);
+    setFormState((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      for (const [k, v] of fd.entries()) {
+        if (typeof v === 'string') next[k] = v;
+      }
+      // Checkbox (only present in FormData when checked)
+      if (formEl.querySelector('input[name="featured"]')) {
+        next.featured = fd.get('featured') !== null;
+      }
+      // Interface lists are stored as arrays but edited as comma text
+      ['interfacesFa', 'interfacesEn'].forEach((n) => {
+        if (fd.get(n) !== null) {
+          next[n] = (fd.get(n) || '').split(',').map((st) => st.trim()).filter(Boolean);
+        }
+      });
+      if (next.interfacesFa) next.interfaces = next.interfacesFa;
+      return next;
+    });
   };
 
   // Save Personal Info Form Handler (Full Bilingual + Voice Introduction)
@@ -1367,9 +1392,6 @@ export const AdminPanel = () => {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id);
-                    setBoardForm(null);
-                    setArticleForm(null);
-                    setExpForm(null);
                   }}
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 w-auto md:w-full text-right ${
                     active
@@ -1904,14 +1926,16 @@ export const AdminPanel = () => {
                         <label className="text-xs font-bold text-white">دسته‌بندی سیستمی برد:</label>
                         <button
                           type="button"
-                          onClick={() => {
-                            setTaxonomyModalTab('boardCategories');
-                            setIsTaxonomyModalOpen(true);
+                          onClick={(e) => {
+                            snapshotFormDraft(e.currentTarget.closest('form'), setBoardForm);
+                            setTaxonomyFocus('boardCategories');
+                            setActiveTab('settings');
+                            setSettingsSubTab('taxonomies');
                           }}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all"
                         >
                           <Sliders className="w-3.5 h-3.5" />
-                          <span>⚙️ مدیریت و تغییر نام دسته‌ها (همگام‌سازی خودکار)</span>
+                          <span>مدیریت دسته‌ها در تنظیمات ←</span>
                         </button>
                       </div>
 
@@ -2134,14 +2158,16 @@ export const AdminPanel = () => {
                         <label className="text-xs font-bold text-white">نرم‌افزار طراحی مدارات الکترونیکی (EDA Tool):</label>
                         <button
                           type="button"
-                          onClick={() => {
-                            setTaxonomyModalTab('edaTools');
-                            setIsTaxonomyModalOpen(true);
+                          onClick={(e) => {
+                            snapshotFormDraft(e.currentTarget.closest('form'), setBoardForm);
+                            setTaxonomyFocus('edaTools');
+                            setActiveTab('settings');
+                            setSettingsSubTab('taxonomies');
                           }}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all"
                         >
                           <Sliders className="w-3.5 h-3.5" />
-                          <span>⚙️ مدیریت نرم‌افزارهای EDA</span>
+                          <span>مدیریت EDA در تنظیمات ←</span>
                         </button>
                       </div>
 
@@ -2179,14 +2205,16 @@ export const AdminPanel = () => {
                         <label className="text-xs font-bold text-white">وضعیت تولید و استقرار تجاری:</label>
                         <button
                           type="button"
-                          onClick={() => {
-                            setTaxonomyModalTab('boardStatuses');
-                            setIsTaxonomyModalOpen(true);
+                          onClick={(e) => {
+                            snapshotFormDraft(e.currentTarget.closest('form'), setBoardForm);
+                            setTaxonomyFocus('boardStatuses');
+                            setActiveTab('settings');
+                            setSettingsSubTab('taxonomies');
                           }}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all"
                         >
                           <Sliders className="w-3.5 h-3.5" />
-                          <span>⚙️ مدیریت وضعیت‌های تولید</span>
+                          <span>مدیریت وضعیت‌ها در تنظیمات ←</span>
                         </button>
                       </div>
 
@@ -2768,14 +2796,16 @@ export const AdminPanel = () => {
                         <label className="text-xs font-bold text-white">دسته‌بندی موضوعی مقاله:</label>
                         <button
                           type="button"
-                          onClick={() => {
-                            setTaxonomyModalTab('articleCategories');
-                            setIsTaxonomyModalOpen(true);
+                          onClick={(e) => {
+                            snapshotFormDraft(e.currentTarget.closest('form'), setArticleForm);
+                            setTaxonomyFocus('articleCategories');
+                            setActiveTab('settings');
+                            setSettingsSubTab('taxonomies');
                           }}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all"
                         >
                           <Sliders className="w-3.5 h-3.5" />
-                          <span>⚙️ مدیریت دسته‌های مقالات (اعمال خودکار)</span>
+                          <span>مدیریت دسته‌ها در تنظیمات ←</span>
                         </button>
                       </div>
 
@@ -4742,7 +4772,7 @@ export const AdminPanel = () => {
                       </p>
                     </div>
 
-                    <TaxonomyManager />
+                    <TaxonomyManager focusId={taxonomyFocus} />
                   </div>
                 )}
 
@@ -5620,13 +5650,6 @@ export const AdminPanel = () => {
         </div>
       
       {/* PROFESSIONAL WORD-STYLE RICH TEXT EDITOR MODAL */}
-      {/* GLOBAL DROPDOWNS & TAXONOMY MANAGER MODAL */}
-      <TaxonomyManagerModal
-        isOpen={isTaxonomyModalOpen}
-        onClose={() => setIsTaxonomyModalOpen(false)}
-        initialTab={taxonomyModalTab}
-      />
-
       <RichTextEditorModal
         isOpen={richEditorState.isOpen}
         onClose={() => setRichEditorState((prev) => ({ ...prev, isOpen: false }))}
