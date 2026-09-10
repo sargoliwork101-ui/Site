@@ -47,6 +47,8 @@ import {
   FileText,
   Database,
   History,
+  Bot,
+  Clock3,
   RotateCcw,
   HardDriveDownload,
   HardDriveUpload,
@@ -153,6 +155,10 @@ export const AdminPanel = () => {
     createSnapshot,
     restoreSnapshot,
     deleteSnapshot,
+    autoBackup,
+    autoBackupStatus,
+    setAutoBackupConfig,
+    getStorageUsage,
     exportDataJson,
     copyBackupToClipboard,
     importDataJson,
@@ -203,6 +209,19 @@ export const AdminPanel = () => {
   const [mediaPickerTarget, setMediaPickerTarget] = useState(null);
   const [newSnapshotName, setNewSnapshotName] = useState('');
   const [clipboardBackupText, setClipboardBackupText] = useState('');
+  // Backup-center local UI: storage meter + auto-backup countdown ticker
+  const [storageUsage, setStorageUsage] = useState(null);
+  const [backupTick, setBackupTick] = useState(0);
+
+  useEffect(() => {
+    if (settingsSubTab !== 'backup') return;
+    try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
+    const t = setInterval(() => {
+      setBackupTick((x) => x + 1);
+      try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
+    }, 30000);
+    return () => clearInterval(t);
+  }, [settingsSubTab]);
 
   // Skills Editing Local State
   const [skillsList, setSkillsList] = useState(data.skills || []);
@@ -1147,15 +1166,8 @@ export const AdminPanel = () => {
               <span className="hidden sm:inline">پشتیبان‌گیری</span>
             </button>
 
-            <button
-              onClick={exportDataJson}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-              title="دانلود فایل بک‌آپ کامل JSON"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
-              <span>JSON</span>
-            </button>
-
+            {/* Single backup entry point: the header shortcut jumps to the Backup
+                center (Settings → Backup). All backup/restore ops live there. */}
             <button
               onClick={logoutAdmin}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition-colors"
@@ -4660,7 +4672,7 @@ export const AdminPanel = () => {
                           <span>مرکز جامع پشتیبان‌گیری، بازگردانی و انتقال به هاست جدید (Migration Suite)</span>
                         </h4>
                         <p className="text-xs text-slate-400">
-                          ذخیره و بازیابی تمامی اطلاعات دوزبانه، بردهای سخت‌افزاری، دیتاشیت‌ها، مقالات و عکس‌ها.
+                          تنها مرکز پشتیبان‌گیری سایت: فایل بک‌آپ، کل سایت را پوشش می‌دهد (محتوا، کاربران، تنظیمات امنیتی، سؤالات بازیابی).
                         </p>
                       </div>
 
@@ -4681,10 +4693,10 @@ export const AdminPanel = () => {
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-white font-bold text-sm">
                             <Download className="w-4 h-4 text-cyan-400" />
-                            <span>۱. خروجی کامل دیتابیس دوزبانه</span>
+                            <span>۱. خروجی کامل کل سایت</span>
                           </div>
                           <p className="text-xs text-slate-400 leading-relaxed">
-                            دریافت بسته کامل JSON شامل تمام فیلدهای فارسی و انگلیسی، تصاویر، دیتاشیت‌ها و تنظیمات قالب.
+                            دریافت بسته کامل JSON: تمام محتوا، کاربران، تنظیمات امنیتی و سؤالات بازیابی. تاریخچه نسخه‌ها فقط در مرورگر می‌ماند. این فایل را جای امن نگه دارید.
                           </p>
                         </div>
 
@@ -4713,10 +4725,10 @@ export const AdminPanel = () => {
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-white font-bold text-sm">
                             <HardDriveUpload className="w-4 h-4 text-amber-400" />
-                            <span>۲. بازیابی بک‌آپ از فایل یا پیست مستقیم</span>
+                            <span>۲. بازیابی کل سایت از فایل یا پیست مستقیم</span>
                           </div>
                           <p className="text-xs text-slate-400 leading-relaxed">
-                            بارگذاری فایل JSON یا پیست متن کد برای بازگردانی فوری تمام متون فارسی و انگلیسی، مقالات، بردها و سوابق.
+                            بارگذاری فایل JSON یا پیست متن کد برای بازگردانی فوری کل سایت (محتوا، کاربران، امنیت، سؤالات بازیابی). قبلش یک نسخه پشتیبان خودکار گرفته می‌شود.
                           </p>
                         </div>
 
@@ -4747,6 +4759,106 @@ export const AdminPanel = () => {
                             </button>
                           </div>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* 3. AUTO BACKUP (debounced timer after last change) */}
+                    <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                          <Bot className="w-4 h-4 text-cyan-400" />
+                          <span>بک‌آپ خودکار بعد از آخرین تغییر</span>
+                        </h5>
+                        <span
+                          className={`text-xs font-bold px-3 py-1 rounded-full border whitespace-nowrap ${
+                            autoBackup?.enabled
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+                          }`}
+                        >
+                          {autoBackup?.enabled ? '🤖 فعال' : '⚪ غیرفعال'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        هر تغییری در هر قسمت سایت بدهی، تایمر از اول شروع می‌شود؛ اگر تا پایان زمان تنظیمی تغییر جدیدی نیاید، یک نسخه خودکار (🤖) ثبت می‌شود. فقط ۵ نسخه خودکار آخر نگه داشته می‌شود و نسخه‌های دستی تو هیچ‌وقت حذف نمی‌شوند.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label className="flex items-center gap-2 text-xs font-bold text-white cursor-pointer p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={!!autoBackup?.enabled}
+                            onChange={(e) => setAutoBackupConfig({ enabled: e.target.checked })}
+                            className="w-4 h-4 accent-cyan-500"
+                          />
+                          بک‌آپ خودکار فعال باشد
+                        </label>
+                        <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                          <label className="block text-xs font-bold text-white mb-1.5">
+                            فاصله بعد از آخرین تغییر (دقیقه):
+                          </label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={1440}
+                            dir="ltr"
+                            value={autoBackup?.minutes ?? 30}
+                            onChange={(e) => setAutoBackupConfig({ minutes: e.target.value })}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                          />
+                          <p className="text-[11px] text-slate-500 mt-1">بین ۵ دقیقه تا ۲۴ ساعت (۱۴۴۰)</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5 text-xs">
+                          <div className="flex items-center gap-1.5 text-slate-300">
+                            <Clock3 className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>
+                              آخرین بک‌آپ خودکار:{' '}
+                              <b className="text-white">
+                                {autoBackup?.lastRun
+                                  ? new Date(autoBackup.lastRun).toLocaleDateString('fa-IR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                  : 'هنوز ثبت نشده'}
+                              </b>
+                            </span>
+                          </div>
+                          <div key={backupTick} className="text-slate-300">
+                            بک‌آپ بعدی:{' '}
+                            <b className="text-white">
+                              {!autoBackup?.enabled
+                                ? '—'
+                                : autoBackupStatus?.pending && autoBackupStatus?.nextAt > Date.now()
+                                  ? `حدود ${Math.max(1, Math.ceil((autoBackupStatus.nextAt - Date.now()) / 60000))} دقیقه دیگر`
+                                  : 'در انتظار تغییر جدید'}
+                            </b>
+                          </div>
+                          <p className="text-[11px] text-slate-500">خودکار فقط وقتی پنل/مرورگر باز است اجرا می‌شود.</p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-bold text-white">حافظه مرورگر (نسخه‌ها و دیتا):</span>
+                          <span className="font-mono text-slate-300">
+                            {storageUsage
+                              ? `${(storageUsage.bytes / 1048576).toFixed(1)}MB از ~5MB`
+                              : '…'}
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              !storageUsage || (storageUsage.bytes / storageUsage.limit) < 0.7
+                                ? 'bg-emerald-500'
+                                : (storageUsage.bytes / storageUsage.limit) < 0.9
+                                  ? 'bg-amber-500'
+                                  : 'bg-rose-500'
+                            }`}
+                            style={{ width: `${storageUsage ? Math.min(100, (storageUsage.bytes / storageUsage.limit) * 100) : 0}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1.5">
+                          اگر حافظه پر شد: فایل بک‌آپ را دانلود کن (جای امن نگهش دار) و نسخه‌های قدیمی جدول پایین را حذف کن.
+                        </p>
                       </div>
                     </div>
 
@@ -4785,7 +4897,14 @@ export const AdminPanel = () => {
                             <div className="flex items-center gap-3">
                               <History className="w-4 h-4 text-purple-400" />
                               <div>
-                                <div className="text-xs font-bold text-white">{snap.name}</div>
+                                <div className="text-xs font-bold text-white flex items-center gap-2">
+                                  {snap.name}
+                                  {snap.auto && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                      🤖 خودکار
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-[11px] font-mono text-slate-400 mt-0.5">{snap.date}</div>
                               </div>
                             </div>

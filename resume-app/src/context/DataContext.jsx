@@ -15,7 +15,7 @@
  * @module DataContext
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initialData } from '../data/defaultData';
 import { TEMPLATES, TEMPLATES_MAP, DEFAULT_TEMPLATE } from '../data/templates';
 import { autoTranslateFaToEn } from '../utils/translatorHelper';
@@ -53,6 +53,10 @@ const DataContext = createContext(null);
 // LocalStorage Persistence Keys
 const STORAGE_KEY = 'embedded_portfolio_data_v2';
 const SNAPSHOTS_KEY = 'embedded_portfolio_snapshots_v2';
+const AUTO_BACKUP_KEY = 'embedded_auto_backup_v1';
+const MAX_AUTO_SNAPSHOTS = 5; // auto snapshots kept (manual ones are never pruned)
+const MAX_MANUAL_SNAPSHOTS = 20;
+const FULL_BACKUP_VERSION = '4.0.0-FULLSITE';
 const AUTH_KEY = 'embedded_admin_auth_token';
 const ADMIN_PASSWORD_KEY = 'embedded_admin_pwd';
 
@@ -697,12 +701,16 @@ export const DataProvider = ({ children }) => {
     }
   }, [data]);
 
-  // Persist snapshots
+  // Persist snapshots (quota-aware: warn once per session, never crash)
   useEffect(() => {
     try {
       localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snapshots));
     } catch (e) {
       console.error('Failed to persist snapshots', e);
+      if (!quotaWarnedRef.current) {
+        quotaWarnedRef.current = true;
+        showToast('⚠️ حافظه مرورگر پر شد! فایل بک‌آپ را دانلود کنید و نسخه‌های قدیمی را حذف کنید.', 'error');
+      }
     }
   }, [snapshots]);
 
@@ -2043,19 +2051,134 @@ export const DataProvider = ({ children }) => {
   };
 
   // --------------------------------------------------------------------------
+  // 14b. AUTOMATIC BACKUP — debounced: fires X minutes after the LAST change
+  // anywhere (content / users / security). Interval is admin-configurable
+  // (panel → backup tab). Skips silently when nothing changed (sig match).
+  // --------------------------------------------------------------------------
+  const [autoBackup, setAutoBackup] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY) || '{}');
+      return {
+        enabled: raw.enabled !== false, // on by default
+        minutes: Math.max(5, Math.min(1440, parseInt(raw.minutes, 10) || 30)),
+        lastRun: raw.lastRun || 0,
+        lastSig: typeof raw.lastSig === 'string' ? raw.lastSig : '',
+      };
+    } catch {
+      return { enabled: true, minutes: 30, lastRun: 0, lastSig: '' };
+    }
+  });
+  const [autoBackupStatus, setAutoBackupStatus] = useState({ pending: false, nextAt: 0 });
+  const autoTimerRef = useRef(null);
+  const lastSigRef = useRef(autoBackup.lastSig);
+  const quotaWarnedRef = useRef(false);
+
+  // Tiny content signature (length + djb2) — detects "anything changed".
+  const sigOf = (obj) => {
+    try {
+      const s = JSON.stringify(obj);
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+      return `${s.length}:${h.toString(36)}`;
+    } catch {
+      return `${Date.now()}`;
+    }
+  };
+
+  // Persist auto-backup config (a content hash is not a secret — safe to store)
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify(autoBackup));
+    } catch (e) {
+      console.error('Failed to persist auto-backup config', e);
+    }
+    lastSigRef.current = autoBackup.lastSig;
+  }, [autoBackup]);
+
+  const setAutoBackupConfig = (patch = {}) => {
+    setAutoBackup((prev) => ({
+      ...prev,
+      enabled: patch.enabled !== undefined ? !!patch.enabled : prev.enabled,
+      minutes:
+        patch.minutes !== undefined
+          ? Math.max(5, Math.min(1440, parseInt(patch.minutes, 10) || prev.minutes))
+          : prev.minutes,
+    }));
+  };
+
+  // Debounce engine: any watched change reschedules the countdown.
+  useEffect(() => {
+    if (!autoBackup.enabled) {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+      setAutoBackupStatus({ pending: false, nextAt: 0 });
+      return;
+    }
+    // First run ever: baseline the signature so we don't snapshot unchanged state.
+    if (!lastSigRef.current) {
+      const base = sigOf({ d: data, u: users, s: stripSecurityForBackup(adminSecurity) });
+      lastSigRef.current = base;
+      setAutoBackup((prev) => (prev.lastSig ? prev : { ...prev, lastSig: base }));
+    }
+    const ms = Math.max(5, Math.min(1440, autoBackup.minutes)) * 60 * 1000;
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    const nextAt = Date.now() + ms;
+    setAutoBackupStatus({ pending: true, nextAt });
+    autoTimerRef.current = setTimeout(() => {
+      const sig = sigOf({ d: data, u: users, s: stripSecurityForBackup(adminSecurity) });
+      if (sig === lastSigRef.current) {
+        setAutoBackupStatus({ pending: false, nextAt: 0 });
+        return; // nothing new since the last auto backup — skip silently
+      }
+      createSnapshot('', { auto: true, silent: true });
+      lastSigRef.current = sig;
+      setAutoBackup((prev) => ({ ...prev, lastRun: Date.now(), lastSig: sig }));
+      setAutoBackupStatus({ pending: false, nextAt: 0 });
+      showToast('🤖 بک‌آپ خودکار ثبت شد.');
+    }, ms);
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, users, adminSecurity, autoBackup.enabled, autoBackup.minutes]);
+
+  // Browser storage meter for the backup tab (UTF-16 ≈ 2 bytes/char, ~5MB cap)
+  const getStorageUsage = () => {
+    const keys = [STORAGE_KEY, SNAPSHOTS_KEY, ADMIN_SECURITY_KEY, USERS_KEY, LOCAL_SECQA_KEY, AUTO_BACKUP_KEY];
+    let bytes = 0;
+    const perKey = {};
+    for (const k of keys) {
+      try {
+        const v = localStorage.getItem(k) || '';
+        perKey[k] = v.length * 2;
+        bytes += v.length * 2;
+      } catch {
+        perKey[k] = 0;
+      }
+    }
+    return { bytes, perKey, limit: 5 * 1024 * 1024 };
+  };
+
+  // --------------------------------------------------------------------------
   // 15. SNAPSHOTS, REVISION HISTORY & FULL JSON BACKUP / RESTORE
   // --------------------------------------------------------------------------
-  const createSnapshot = (customName = '') => {
+  // Snapshots = CONTENT history (data only — bounded size). Users/security/secqa
+  // are covered by the FILE backup (buildFullBackup). Old snapshots without
+  // the `auto` flag are treated as manual (backward compatible).
+  const createSnapshot = (customName = '', opts = {}) => {
+    const { auto = false, silent = false } = opts;
+    const now = new Date();
+    const faDateTime = now.toLocaleDateString('fa-IR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
     const newSnapshot = {
-      id: `snap-${Date.now()}`,
-      name: customName || `اسنپ‌شات ${new Date().toLocaleTimeString('fa-IR')}`,
-      date: new Date().toLocaleDateString('fa-IR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      id: `snap-${Date.now()}${auto ? '-auto' : ''}`,
+      auto,
+      name: customName || (auto ? `🤖 خودکار · ${faDateTime}` : `اسنپ‌شات ${now.toLocaleTimeString('fa-IR')}`),
+      date: faDateTime,
       timestamp: Date.now(),
       boardsCount: data.boards.length,
       articlesCount: data.articles.length,
@@ -2064,8 +2187,20 @@ export const DataProvider = ({ children }) => {
       data: JSON.parse(JSON.stringify(data)),
     };
 
-    setSnapshots((prev) => [newSnapshot, ...prev.slice(0, 19)]);
-    showToast(`اسنپ‌شات «${newSnapshot.name}» با موفقیت ذخیره شد.`);
+    setSnapshots((prev) => {
+      const next = [newSnapshot, ...(prev || [])];
+      if (!auto) {
+        // Manual snapshots: cap total manuals, never prune autos here.
+        const manuals = next.filter((s) => !s.auto).slice(0, MAX_MANUAL_SNAPSHOTS);
+        const autos = next.filter((s) => s.auto);
+        return [...manuals, ...autos].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      }
+      // Auto snapshots: keep only the newest few; manual ones are untouched.
+      const manuals = next.filter((s) => !s.auto);
+      const autos = next.filter((s) => s.auto).slice(0, MAX_AUTO_SNAPSHOTS);
+      return [...manuals, ...autos].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    });
+    if (!silent) showToast(`اسنپ‌شات «${newSnapshot.name}» با موفقیت ذخیره شد.`);
   };
 
   const restoreSnapshot = (snapshotId) => {
@@ -2084,45 +2219,61 @@ export const DataProvider = ({ children }) => {
     showToast('اسنپ‌شات حذف شد.');
   };
 
-  const exportDataJson = () => {
-    const fullBackupObject = {
-      meta: {
-        app: 'Embedded Hardware Engineer Portfolio & Resume System',
-        version: '3.0.0-RBAC',
-        exportedAt: new Date().toISOString(),
-        siteTitle: data.siteConfig.titleFa,
-        author: data.personalInfo.nameFa,
-      },
-      data,
-      users,
-      taxonomies: data.taxonomies,
-    };
+  // --- Full-site backup envelope (v4) -------------------------------------------
+  // Contains EVERYTHING for disaster recovery: content, users (hashes only),
+  // security settings (password/OTP stripped), recovery Q&A (hashed answers),
+  // auto-backup config. Snapshots stay browser-local (20 full copies would
+  // make a giant file). SMTP settings live on the server already.
+  const stripSecurityForBackup = (sec) => {
+    if (!sec || typeof sec !== 'object') return {};
+    const { password, activeOtp, otpExpiresAt, ...safe } = sec;
+    void password; void activeOtp; void otpExpiresAt;
+    return safe;
+  };
 
-    const fileName = `embedded_portfolio_backup_${new Date().toISOString().split('T')[0]}.json`;
+  const readSecQaForBackup = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LOCAL_SECQA_KEY) || '[]');
+      return Array.isArray(raw)
+        ? raw.filter((r) => r && typeof r.q === 'string' && typeof r.h === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const buildFullBackup = () => ({
+    format: 'fullsite',
+    meta: {
+      app: 'Embedded Hardware Engineer Portfolio & Resume System',
+      version: FULL_BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      siteTitle: data?.siteConfig?.titleFa || data?.siteConfig?.siteTitle || '',
+      author: data?.personalInfo?.nameFa || '',
+    },
+    data,
+    users,
+    adminSecurity: stripSecurityForBackup(adminSecurity),
+    secqa: readSecQaForBackup(),
+    autoBackup: { enabled: !!autoBackup.enabled, minutes: autoBackup.minutes },
+  });
+
+  const exportDataJson = () => {
+    const fullBackupObject = buildFullBackup();
+    const fileName = `site_full_backup_${new Date().toISOString().split('T')[0]}.json`;
     triggerSafeDownload(fullBackupObject, fileName, 'application/json');
-    showToast('فایل پشتیبان کامل JSON دانلود شد.');
+    showToast('فایل بک‌آپ کامل سایت دانلود شد (محتوا، کاربران، امنیت، سؤالات بازیابی).');
   };
 
   const copyBackupToClipboard = async () => {
     try {
-      const fullBackupObject = {
-        meta: {
-          app: 'Embedded Hardware Engineer Portfolio & Resume System',
-          version: '3.0.0-RBAC',
-          exportedAt: new Date().toISOString(),
-          siteTitle: data.siteConfig.titleFa,
-          author: data.personalInfo.nameFa,
-        },
-        data,
-        users,
-        taxonomies: data.taxonomies,
-      };
+      const fullBackupObject = buildFullBackup();
       await navigator.clipboard.writeText(JSON.stringify(fullBackupObject, null, 2));
-      showToast('کد پشتیبان JSON با موفقیت در کلیپ‌بورد کپی شد!');
+      showToast('کد بک‌آپ کامل سایت در کلیپ‌بورد کپی شد!');
       return true;
     } catch (e) {
       console.error('Failed to copy to clipboard', e);
-      showToast('خطا در کپی به کلیپ‌بورد', 'error');
+      showToast('خطا در کپی به کلیپ‌بورد (فایل حجیم است؟ دانلود را امتحان کنید.)', 'error');
       return false;
     }
   };
@@ -2162,7 +2313,35 @@ export const DataProvider = ({ children }) => {
           setUsers(targetUsers);
         }
 
-        showToast('پشتیبان با موفقیت بازگردانی شد و تمام بخش‌های سایت آپدیت شدند.');
+        // Full-site envelope (v4+): also restore security, recovery Q&A, auto cfg.
+        // Legacy files (bare data / v3) restore content (+users) as before.
+        const restoredExtras = [];
+        if (parsed && parsed.format === 'fullsite') {
+          if (parsed.adminSecurity && typeof parsed.adminSecurity === 'object') {
+            setAdminSecurity((prev) => ({ ...prev, ...stripSecurityForBackup(parsed.adminSecurity) }));
+            restoredExtras.push('تنظیمات امنیتی');
+          }
+          if (Array.isArray(parsed.secqa)) {
+            const cleanQa = parsed.secqa
+              .filter((r) => r && typeof r.q === 'string' && typeof r.h === 'string')
+              .slice(0, 3);
+            try {
+              localStorage.setItem(LOCAL_SECQA_KEY, JSON.stringify(cleanQa));
+              if (cleanQa.length > 0) restoredExtras.push('سؤالات بازیابی');
+            } catch { /* quota/private mode: content restore still succeeded */ }
+          }
+          if (parsed.autoBackup && typeof parsed.autoBackup === 'object') {
+            const m = Math.max(5, Math.min(1440, parseInt(parsed.autoBackup.minutes, 10) || 30));
+            setAutoBackup((prev) => ({ ...prev, enabled: !!parsed.autoBackup.enabled, minutes: m }));
+            restoredExtras.push('تنظیمات بک‌آپ خودکار');
+          }
+        }
+
+        showToast(
+          restoredExtras.length > 0
+            ? `کل سایت بازگردانی شد (محتوا، کاربران، ${restoredExtras.join('، ')}).`
+            : 'پشتیبان با موفقیت بازگردانی شد و تمام بخش‌های سایت آپدیت شدند.'
+        );
         return true;
       }
     } catch (e) {
@@ -2263,6 +2442,10 @@ export const DataProvider = ({ children }) => {
         createSnapshot,
         restoreSnapshot,
         deleteSnapshot,
+        autoBackup,
+        autoBackupStatus,
+        setAutoBackupConfig,
+        getStorageUsage,
         exportDataJson,
         copyBackupToClipboard,
         importDataJson,
