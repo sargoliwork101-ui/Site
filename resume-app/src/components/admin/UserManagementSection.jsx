@@ -66,7 +66,8 @@ export const UserManagementSection = () => {
     deleteUser,
     switchUserForTesting,
     ROLE_DEFINITIONS,
-    showToast
+    showToast,
+    showConfirmDialog
   } = useData();
 
   // Search & Filter state
@@ -395,9 +396,13 @@ export const UserManagementSection = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`آیا از حذف کاربر «${u.nameFa || u.username}» اطمینان دارید؟`)) {
-                          deleteUser(u.id);
-                        }
+                        showConfirmDialog({
+                          type: 'danger',
+                          title: 'حذف کاربر؟',
+                          message: `کاربر «${u.nameFa || u.username}» برای همیشه حذف می‌شود و این عمل قابل بازگشت نیست.`,
+                          confirmText: 'بله، حذف کن',
+                          onConfirm: () => deleteUser(u.id),
+                        });
                       }}
                       className="p-1.5 rounded-xl text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
                       title="حذف کاربر"

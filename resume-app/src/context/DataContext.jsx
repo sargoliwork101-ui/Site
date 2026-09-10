@@ -681,15 +681,21 @@ export const DataProvider = ({ children }) => {
     return () => window.removeEventListener('hashchange', handleHash);
   }, [data?.blogPosts]);
 
-  // Active Toast Notification state
-  const [toast, setToast] = useState(null);
+  // Toast notifications (queue, max 3 stacked — rapid actions never eat each other)
+  const [toasts, setToasts] = useState([]);
+  const toastIdRef = useRef(0);
 
-  // Show Toast notification helper
+  // Show Toast notification helper (type: 'success' | 'error' | 'warning' | 'info')
   const showToast = (message, type = 'success') => {
-    setToast({ message, type, id: Date.now() });
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev.slice(-2), { message, type, id }]);
     setTimeout(() => {
-      setToast((prev) => (prev?.message === message ? null : prev));
-    }, 4000);
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, type === 'error' ? 6000 : 4000);
+  };
+
+  const dismissToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
   // Persist data whenever it changes
@@ -2051,27 +2057,37 @@ export const DataProvider = ({ children }) => {
   };
 
   // --------------------------------------------------------------------------
-  // 14b. AUTOMATIC BACKUP — debounced: fires X minutes after the LAST change
+  // 14b. AUTOMATIC BACKUP — debounced: fires ONCE, X days after the LAST change
   // anywhere (content / users / security). Interval is admin-configurable
-  // (panel → backup tab). Skips silently when nothing changed (sig match).
+  // 1..30 days (panel → backup tab). Skips silently when nothing changed
+  // (sig match). The deadline is wall-clock persisted, so closing the
+  // browser only postpones the single firing until the panel reopens.
   // --------------------------------------------------------------------------
   const [autoBackup, setAutoBackup] = useState(() => {
+    // Interval is DAYS (1..30). Migrates the old minutes-based config once.
+    const fromMinutes = (m) => Math.max(1, Math.min(30, Math.round((m || 30) / 1440) || 1));
     try {
       const raw = JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY) || '{}');
       return {
         enabled: raw.enabled !== false, // on by default
-        minutes: Math.max(5, Math.min(1440, parseInt(raw.minutes, 10) || 30)),
+        days:
+          raw.days !== undefined
+            ? Math.max(1, Math.min(30, parseInt(raw.days, 10) || 7))
+            : fromMinutes(parseInt(raw.minutes, 10)),
         lastRun: raw.lastRun || 0,
         lastSig: typeof raw.lastSig === 'string' ? raw.lastSig : '',
+        deadline: raw.deadline || 0, // persisted wall-clock target (survives reloads)
       };
     } catch {
-      return { enabled: true, minutes: 30, lastRun: 0, lastSig: '' };
+      return { enabled: true, days: 7, lastRun: 0, lastSig: '', deadline: 0 };
     }
   });
   const [autoBackupStatus, setAutoBackupStatus] = useState({ pending: false, nextAt: 0 });
   const autoTimerRef = useRef(null);
   const lastSigRef = useRef(autoBackup.lastSig);
+  const mountSigRef = useRef('');
   const quotaWarnedRef = useRef(false);
+  const MAX_TIMEOUT_MS = 2147483647; // setTimeout ceiling (~24.8 days)
 
   // Tiny content signature (length + djb2) — detects "anything changed".
   const sigOf = (obj) => {
@@ -2099,47 +2115,79 @@ export const DataProvider = ({ children }) => {
     setAutoBackup((prev) => ({
       ...prev,
       enabled: patch.enabled !== undefined ? !!patch.enabled : prev.enabled,
-      minutes:
-        patch.minutes !== undefined
-          ? Math.max(5, Math.min(1440, parseInt(patch.minutes, 10) || prev.minutes))
-          : prev.minutes,
+      days:
+        patch.days !== undefined
+          ? Math.max(1, Math.min(30, parseInt(patch.days, 10) || prev.days))
+          : prev.days,
     }));
   };
 
-  // Debounce engine: any watched change reschedules the countdown.
+  // Debounce engine: any watched change RESTARTS the countdown from now; when
+  // the deadline arrives with no newer change, ONE auto snapshot fires and the
+  // engine goes idle until the next real change. Zero polling, zero weight:
+  // a single (possibly chained — setTimeout caps at ~24.8d) timer per window.
   useEffect(() => {
     if (!autoBackup.enabled) {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
       setAutoBackupStatus({ pending: false, nextAt: 0 });
       return;
     }
-    // First run ever: baseline the signature so we don't snapshot unchanged state.
+    const sig = sigOf({ d: data, u: users, s: stripSecurityForBackup(adminSecurity) });
+    if (!mountSigRef.current) mountSigRef.current = sig; // baseline this session
     if (!lastSigRef.current) {
-      const base = sigOf({ d: data, u: users, s: stripSecurityForBackup(adminSecurity) });
-      lastSigRef.current = base;
-      setAutoBackup((prev) => (prev.lastSig ? prev : { ...prev, lastSig: base }));
-    }
-    const ms = Math.max(5, Math.min(1440, autoBackup.minutes)) * 60 * 1000;
-    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    const nextAt = Date.now() + ms;
-    setAutoBackupStatus({ pending: true, nextAt });
-    autoTimerRef.current = setTimeout(() => {
-      const sig = sigOf({ d: data, u: users, s: stripSecurityForBackup(adminSecurity) });
-      if (sig === lastSigRef.current) {
-        setAutoBackupStatus({ pending: false, nextAt: 0 });
-        return; // nothing new since the last auto backup — skip silently
-      }
-      createSnapshot('', { auto: true, silent: true });
       lastSigRef.current = sig;
-      setAutoBackup((prev) => ({ ...prev, lastRun: Date.now(), lastSig: sig }));
+      setAutoBackup((prev) => (prev.lastSig ? prev : { ...prev, lastSig: sig }));
+    }
+    const changedSinceMount = sig !== mountSigRef.current;
+    const now = Date.now();
+    const dayMs = 86400000;
+    let target;
+    if (changedSinceMount) {
+      // Real change → (re)start the countdown from now (persisted wall-clock).
+      target = now + Math.max(1, Math.min(30, autoBackup.days)) * dayMs;
+      setAutoBackup((prev) => ({ ...prev, deadline: target }));
+    } else if (autoBackup.deadline && autoBackup.deadline > now) {
+      // Pure mount: honor the persisted deadline — opening the panel is NOT
+      // a change, so the countdown must NOT be extended.
+      target = autoBackup.deadline;
+    } else if (autoBackup.deadline && autoBackup.deadline <= now) {
+      // Deadline passed while the panel was closed → verify + fire soon, once.
+      target = now + 60000;
+    } else {
+      // No deadline and nothing changed → idle until the first change.
       setAutoBackupStatus({ pending: false, nextAt: 0 });
-      showToast('🤖 بک‌آپ خودکار ثبت شد.');
-    }, ms);
+      return;
+    }
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    setAutoBackupStatus({ pending: true, nextAt: target });
+    const arm = (fireAt) => {
+      const wait = Math.min(Math.max(0, fireAt - Date.now()), MAX_TIMEOUT_MS);
+      autoTimerRef.current = setTimeout(() => {
+        if (Date.now() < fireAt - 1000) {
+          arm(fireAt); // 30d exceeds the setTimeout ceiling → chain, still no polling
+          return;
+        }
+        // NOTE: no stale-closure risk — any state change re-runs this effect
+        // and re-arms; reaching here untouched means state is exactly as captured.
+        const cur = sigOf({ d: data, u: users, s: stripSecurityForBackup(adminSecurity) });
+        if (cur === lastSigRef.current) {
+          setAutoBackup((prev) => ({ ...prev, deadline: 0 }));
+          setAutoBackupStatus({ pending: false, nextAt: 0 });
+          return; // nothing new since the last auto backup — skip silently
+        }
+        createSnapshot('', { auto: true, silent: true });
+        lastSigRef.current = cur;
+        setAutoBackup((prev) => ({ ...prev, lastRun: Date.now(), lastSig: cur, deadline: 0 }));
+        setAutoBackupStatus({ pending: false, nextAt: 0 });
+        showToast('🤖 بک‌آپ خودکار ثبت شد.');
+      }, wait);
+    };
+    arm(target);
     return () => {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, users, adminSecurity, autoBackup.enabled, autoBackup.minutes]);
+  }, [data, users, adminSecurity, autoBackup.enabled, autoBackup.days]);
 
   // Browser storage meter for the backup tab (UTF-16 ≈ 2 bytes/char, ~5MB cap)
   const getStorageUsage = () => {
@@ -2205,13 +2253,22 @@ export const DataProvider = ({ children }) => {
 
   const restoreSnapshot = (snapshotId) => {
     const snap = snapshots.find((s) => s.id === snapshotId);
-    if (!snap) return;
-
-    if (window.confirm(`آیا مطمئن هستید که می‌خواهید به نسخه «${snap.name}» بازگردید؟`)) {
-      createSnapshot(`بک‌آپ خودکار قبل از بازگردانی ${snap.name}`);
-      setData(JSON.parse(JSON.stringify(snap.data)));
-      showToast(`نسخه «${snap.name}» با موفقیت بازگردانی شد.`);
+    if (!snap || !snap.data) {
+      showToast('این نسخه دیتای معتبری ندارد.', 'error');
+      return;
     }
+
+    showConfirmDialog({
+      type: 'warning',
+      title: 'بازگشت به نسخه قبلی؟',
+      message: `به نسخه «${snap.name}» برمی‌گردید. فقط محتوای سایت جایگزین می‌شود (کاربران و رمزها دست نمی‌خورند) و قبلش یک نسخه پشتیبان از وضعیت فعلی گرفته می‌شود.`,
+      confirmText: 'بله، برگرد',
+      onConfirm: () => {
+        createSnapshot(`بک‌آپ خودکار قبل از بازگردانی ${snap.name}`);
+        setData(JSON.parse(JSON.stringify(snap.data)));
+        showToast(`نسخه «${snap.name}» با موفقیت بازگردانی شد.`);
+      },
+    });
   };
 
   const deleteSnapshot = (snapshotId) => {
@@ -2255,7 +2312,7 @@ export const DataProvider = ({ children }) => {
     users,
     adminSecurity: stripSecurityForBackup(adminSecurity),
     secqa: readSecQaForBackup(),
-    autoBackup: { enabled: !!autoBackup.enabled, minutes: autoBackup.minutes },
+    autoBackup: { enabled: !!autoBackup.enabled, days: autoBackup.days },
   });
 
   const exportDataJson = () => {
@@ -2278,7 +2335,10 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const importDataJson = (jsonString) => {
+  // Returns false on invalid format (toast shown, no dialog). Otherwise opens
+  // the themed confirm dialog and returns true; `opts.onSuccess` runs only
+  // after the user confirms AND the restore completes.
+  const importDataJson = (jsonString, opts = {}) => {
     try {
       const parsed = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
       const targetData = parsed.data || parsed;
@@ -2289,61 +2349,75 @@ export const DataProvider = ({ children }) => {
         return false;
       }
 
-      if (window.confirm('آیا از بازگردانی این فایل پشتیبان اطمینان دارید؟ تمام تغییرات فعلی جایگزین خواهند شد.')) {
-        createSnapshot('بک‌آپ خودکار قبل از بازیابی JSON خارجی');
-        const cleanTarget = sanitizeBackupPayload(targetData);
+      const isFull = parsed && parsed.format === 'fullsite';
+      showConfirmDialog({
+        type: 'warning',
+        title: 'بازیابی فایل پشتیبان؟',
+        message: isFull
+          ? 'کل سایت (محتوا، کاربران، تنظیمات امنیتی، سؤالات بازیابی) با این فایل جایگزین می‌شود. قبلش یک نسخه پشتیبان از وضعیت فعلی گرفته می‌شود.'
+          : 'محتوای سایت با این فایل جایگزین می‌شود. قبلش یک نسخه پشتیبان از وضعیت فعلی گرفته می‌شود.',
+        confirmText: 'بله، بازیابی کن',
+        onConfirm: () => {
+            createSnapshot('بک‌آپ خودکار قبل از بازیابی JSON خارجی');
+          const cleanTarget = sanitizeBackupPayload(targetData);
 
-        setData({
-          ...initialData,
-          ...cleanTarget,
-          boards: cleanTarget.boards || initialData.boards,
-          articles: cleanTarget.articles || initialData.articles,
-          skills: cleanTarget.skills || initialData.skills,
-          experiences: cleanTarget.experiences || initialData.experiences,
-          education: cleanTarget.education || initialData.education,
-          certifications: cleanTarget.certifications || initialData.certifications,
-          taxonomies: { ...initialData.taxonomies, ...(cleanTarget.taxonomies || {}) },
-          mediaLibrary: cleanTarget.mediaLibrary || initialMedia,
-          personalInfo: { ...initialData.personalInfo, ...(cleanTarget.personalInfo || {}) },
-          siteConfig: { ...initialData.siteConfig, ...(cleanTarget.siteConfig || {}) },
-          seoSettings: { ...initialData.seoSettings, ...(cleanTarget.seoSettings || {}) },
-        });
+          setData({
+            ...initialData,
+            ...cleanTarget,
+            boards: cleanTarget.boards || initialData.boards,
+            articles: cleanTarget.articles || initialData.articles,
+            skills: cleanTarget.skills || initialData.skills,
+            experiences: cleanTarget.experiences || initialData.experiences,
+            education: cleanTarget.education || initialData.education,
+            certifications: cleanTarget.certifications || initialData.certifications,
+            taxonomies: { ...initialData.taxonomies, ...(cleanTarget.taxonomies || {}) },
+            mediaLibrary: cleanTarget.mediaLibrary || initialMedia,
+            personalInfo: { ...initialData.personalInfo, ...(cleanTarget.personalInfo || {}) },
+            siteConfig: { ...initialData.siteConfig, ...(cleanTarget.siteConfig || {}) },
+            seoSettings: { ...initialData.seoSettings, ...(cleanTarget.seoSettings || {}) },
+          });
 
-        if (Array.isArray(targetUsers) && targetUsers.length > 0) {
-          setUsers(targetUsers);
-        }
-
-        // Full-site envelope (v4+): also restore security, recovery Q&A, auto cfg.
-        // Legacy files (bare data / v3) restore content (+users) as before.
-        const restoredExtras = [];
-        if (parsed && parsed.format === 'fullsite') {
-          if (parsed.adminSecurity && typeof parsed.adminSecurity === 'object') {
-            setAdminSecurity((prev) => ({ ...prev, ...stripSecurityForBackup(parsed.adminSecurity) }));
-            restoredExtras.push('تنظیمات امنیتی');
+          if (Array.isArray(targetUsers) && targetUsers.length > 0) {
+            setUsers(targetUsers);
           }
-          if (Array.isArray(parsed.secqa)) {
-            const cleanQa = parsed.secqa
-              .filter((r) => r && typeof r.q === 'string' && typeof r.h === 'string')
-              .slice(0, 3);
-            try {
-              localStorage.setItem(LOCAL_SECQA_KEY, JSON.stringify(cleanQa));
-              if (cleanQa.length > 0) restoredExtras.push('سؤالات بازیابی');
-            } catch { /* quota/private mode: content restore still succeeded */ }
-          }
-          if (parsed.autoBackup && typeof parsed.autoBackup === 'object') {
-            const m = Math.max(5, Math.min(1440, parseInt(parsed.autoBackup.minutes, 10) || 30));
-            setAutoBackup((prev) => ({ ...prev, enabled: !!parsed.autoBackup.enabled, minutes: m }));
-            restoredExtras.push('تنظیمات بک‌آپ خودکار');
-          }
-        }
 
-        showToast(
-          restoredExtras.length > 0
-            ? `کل سایت بازگردانی شد (محتوا، کاربران، ${restoredExtras.join('، ')}).`
-            : 'پشتیبان با موفقیت بازگردانی شد و تمام بخش‌های سایت آپدیت شدند.'
-        );
-        return true;
-      }
+          // Full-site envelope (v4+): also restore security, recovery Q&A, auto cfg.
+          // Legacy files (bare data / v3) restore content (+users) as before.
+          const restoredExtras = [];
+          if (parsed && parsed.format === 'fullsite') {
+            if (parsed.adminSecurity && typeof parsed.adminSecurity === 'object') {
+              setAdminSecurity((prev) => ({ ...prev, ...stripSecurityForBackup(parsed.adminSecurity) }));
+              restoredExtras.push('تنظیمات امنیتی');
+            }
+            if (Array.isArray(parsed.secqa)) {
+              const cleanQa = parsed.secqa
+                .filter((r) => r && typeof r.q === 'string' && typeof r.h === 'string')
+                .slice(0, 3);
+              try {
+                localStorage.setItem(LOCAL_SECQA_KEY, JSON.stringify(cleanQa));
+                if (cleanQa.length > 0) restoredExtras.push('سؤالات بازیابی');
+              } catch { /* quota/private mode: content restore still succeeded */ }
+            }
+            if (parsed.autoBackup && typeof parsed.autoBackup === 'object') {
+              const rawD =
+                parsed.autoBackup.days !== undefined
+                  ? parseInt(parsed.autoBackup.days, 10)
+                  : Math.round((parseInt(parsed.autoBackup.minutes, 10) || 30) / 1440) || 1;
+              const d = Math.max(1, Math.min(30, rawD || 7));
+              setAutoBackup((prev) => ({ ...prev, enabled: !!parsed.autoBackup.enabled, days: d, deadline: 0 }));
+              restoredExtras.push('تنظیمات بک‌آپ خودکار');
+            }
+          }
+
+          showToast(
+            restoredExtras.length > 0
+              ? `کل سایت بازگردانی شد (محتوا، کاربران، ${restoredExtras.join('، ')}).`
+              : 'پشتیبان با موفقیت بازگردانی شد و تمام بخش‌های سایت آپدیت شدند.'
+          );
+          if (opts.onSuccess) opts.onSuccess();
+        },
+      });
+      return true;
     } catch (e) {
       console.error('Failed to import JSON', e);
       showToast('فرمت فایل پشتیبان JSON نامعتبر یا آسیب‌دیده است!', 'error');
@@ -2352,14 +2426,32 @@ export const DataProvider = ({ children }) => {
   };
 
   const resetToDefaults = () => {
-    if (window.confirm('آیا مطمئن هستید که می‌خواهید تمام داده‌ها و تنظیمات را به حالت اولیه برگردانید؟')) {
-      createSnapshot('بک‌آپ قبل از ریست کارخانه');
-      setData(initialData);
-      setUsers(DEFAULT_USERS);
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(USERS_KEY);
-      showToast('داده‌های سایت با موفقیت به حالت کارخانه بازنشانی شدند.');
-    }
+    showConfirmDialog({
+      type: 'danger',
+      title: 'بازنشانی کارخانه؟',
+      message: 'تمام محتوا، کاربران، تنظیمات امنیتی و سؤالات بازیابی به حالت اولیه برمی‌گردند. قبلش یک نسخه پشتیبان گرفته می‌شود و تاریخچه نسخه‌ها (راه برگشت شما) دست‌نخورده می‌ماند.',
+      confirmText: 'بله، ریست کن',
+      onConfirm: () => {
+        createSnapshot('بک‌آپ قبل از ریست کارخانه');
+        setData(initialData);
+        setUsers(DEFAULT_USERS);
+        setAdminSecurity({
+          recoveryEmail: initialData.personalInfo?.email || 'arash.taheri.hardware@gmail.com',
+          isEmailVerified: true,
+          isFirstTimeSetupComplete: true,
+          activeOtp: null,
+          otpExpiresAt: null,
+        });
+        setAutoBackup({ enabled: true, days: 7, lastRun: 0, lastSig: '', deadline: 0 });
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(USERS_KEY);
+          localStorage.removeItem(ADMIN_SECURITY_KEY);
+          localStorage.removeItem(LOCAL_SECQA_KEY);
+        } catch { /* ignore */ }
+        showToast('داده‌های سایت با موفقیت به حالت کارخانه بازنشانی شدند.');
+      },
+    });
   };
 
   const toggleLanguage = () => {
@@ -2382,7 +2474,8 @@ export const DataProvider = ({ children }) => {
         DEFAULT_USERS,
         currentTemplate,
         isAuthenticated,
-        toast,
+        toasts,
+        dismissToast,
         showToast,
         setTemplate,
         updateSiteConfig,

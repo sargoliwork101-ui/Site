@@ -689,10 +689,9 @@ export const AdminPanel = () => {
     reader.onload = (event) => {
       const content = event.target?.result;
       if (typeof content === 'string') {
-        const success = importDataJson(content);
-        if (success) {
-          setSkillsList(data.skills || []);
-        }
+        importDataJson(content, {
+          onSuccess: () => setSkillsList(data.skills || []),
+        });
       }
     };
     reader.readAsText(file);
@@ -727,6 +726,7 @@ export const AdminPanel = () => {
       linkedin: formData.get('linkedin'),
       website: formData.get('website'),
     });
+    showToast('اطلاعات فردی دوزبانه با موفقیت ذخیره شد.');
   };
 
   // Save SEO Form Handler (Full Bilingual)
@@ -745,6 +745,7 @@ export const AdminPanel = () => {
       authorEn: formData.get('authorEn'),
       twitterHandle: formData.get('twitterHandle'),
     });
+    showToast('تنظیمات سئو دوزبانه با موفقیت ذخیره شد.');
   };
 
   // Save Layout & Grid Preferences (Rows * Columns = Dynamic Limit)
@@ -1071,11 +1072,12 @@ export const AdminPanel = () => {
       showToast('لطفاً ابتدا کد متنی پشتیبان را در کادر پیست نمایید.', 'error');
       return;
     }
-    const success = importDataJson(clipboardBackupText.trim());
-    if (success) {
-      setClipboardBackupText('');
-      setSkillsList(data.skills || []);
-    }
+    importDataJson(clipboardBackupText.trim(), {
+      onSuccess: () => {
+        setClipboardBackupText('');
+        setSkillsList(data.skills || []);
+      },
+    });
   };
 
   const handleCreateSnapshot = () => {
@@ -4781,7 +4783,7 @@ export const AdminPanel = () => {
                       </div>
 
                       <p className="text-xs text-slate-400 leading-relaxed">
-                        هر تغییری در هر قسمت سایت بدهی، تایمر از اول شروع می‌شود؛ اگر تا پایان زمان تنظیمی تغییر جدیدی نیاید، یک نسخه خودکار (🤖) ثبت می‌شود. فقط ۵ نسخه خودکار آخر نگه داشته می‌شود و نسخه‌های دستی تو هیچ‌وقت حذف نمی‌شوند.
+                        هر تغییری در هر قسمت سایت بدهی، تایمر از اول شروع می‌شود؛ اگر تا پایان زمان تنظیمی تغییر جدیدی نیاید، فقط یک نسخه خودکار (🤖) در جدول پایین ثبت می‌شود — نه بیشتر. فقط ۵ نسخه خودکار آخر نگه داشته می‌شود و نسخه‌های دستی تو هیچ‌وقت حذف نمی‌شوند.
                       </p>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -4796,18 +4798,18 @@ export const AdminPanel = () => {
                         </label>
                         <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
                           <label className="block text-xs font-bold text-white mb-1.5">
-                            فاصله بعد از آخرین تغییر (دقیقه):
+                            فاصله بعد از آخرین تغییر (روز):
                           </label>
                           <input
                             type="number"
-                            min={5}
-                            max={1440}
+                            min={1}
+                            max={30}
                             dir="ltr"
-                            value={autoBackup?.minutes ?? 30}
-                            onChange={(e) => setAutoBackupConfig({ minutes: e.target.value })}
+                            value={autoBackup?.days ?? 7}
+                            onChange={(e) => setAutoBackupConfig({ days: e.target.value })}
                             className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                           />
-                          <p className="text-[11px] text-slate-500 mt-1">بین ۵ دقیقه تا ۲۴ ساعت (۱۴۴۰)</p>
+                          <p className="text-[11px] text-slate-500 mt-1">بین ۱ تا ۳۰ روز (پیش‌فرض ۷ روز)</p>
                         </div>
                         <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5 text-xs">
                           <div className="flex items-center gap-1.5 text-slate-300">
@@ -4827,11 +4829,16 @@ export const AdminPanel = () => {
                               {!autoBackup?.enabled
                                 ? '—'
                                 : autoBackupStatus?.pending && autoBackupStatus?.nextAt > Date.now()
-                                  ? `حدود ${Math.max(1, Math.ceil((autoBackupStatus.nextAt - Date.now()) / 60000))} دقیقه دیگر`
+                                  ? (() => {
+                                      const ms = autoBackupStatus.nextAt - Date.now();
+                                      if (ms > 86400000) return `حدود ${Math.ceil(ms / 86400000)} روز دیگر`;
+                                      if (ms > 3600000) return `حدود ${Math.ceil(ms / 3600000)} ساعت دیگر`;
+                                      return 'کمتر از یک ساعت دیگر';
+                                    })()
                                   : 'در انتظار تغییر جدید'}
                             </b>
                           </div>
-                          <p className="text-[11px] text-slate-500">خودکار فقط وقتی پنل/مرورگر باز است اجرا می‌شود.</p>
+                          <p className="text-[11px] text-slate-500">تایمر با ساعت واقعی جلو می‌رود؛ اگر موعدش وقتی برسد که پنل بسته است، حدود یک دقیقه بعد از باز شدن پنل همان یک نسخه ثبت می‌شود.</p>
                         </div>
                       </div>
 
@@ -4858,6 +4865,24 @@ export const AdminPanel = () => {
                         </div>
                         <p className="text-[11px] text-slate-500 mt-1.5">
                           اگر حافظه پر شد: فایل بک‌آپ را دانلود کن (جای امن نگهش دار) و نسخه‌های قدیمی جدول پایین را حذف کن.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/25 space-y-2">
+                        <h6 className="text-xs font-bold text-cyan-300">📍 بک‌آپ‌ها دقیقاً کجا ذخیره می‌شوند؟</h6>
+                        <ul className="text-[11px] text-slate-300 leading-relaxed space-y-1.5 list-disc list-inside">
+                          <li>
+                            <b className="text-white">نسخه‌های جدول پایین (دستی + خودکار):</b> داخل حافظه داخلی همین مرورگر و همین دستگاه (localStorage) با کلید <code dir="ltr" className="text-cyan-300 font-mono">embedded_portfolio_snapshots_v2</code> — برای دیدنش در کروم/اج کلید <code dir="ltr" className="text-cyan-300 font-mono">F12</code> را بزن، تب <code dir="ltr" className="text-cyan-300 font-mono">Application</code> ← بخش <code dir="ltr" className="text-cyan-300 font-mono">Local Storage</code> ← آدرس سایت.
+                          </li>
+                          <li>
+                            <b className="text-white">فایل بک‌آپ کامل (.json):</b> هرجا که خودت دانلودش می‌کنی (معمولاً پوشه Downloads) — این تنها نسخه‌ای است که بیرون از مرورگر است و با پاک شدن دیتای مرورگر از بین نمی‌رود.
+                          </li>
+                          <li>
+                            <b className="text-white">رمزها و صندوق SMTP:</b> روی خود هاست (پوشه <code dir="ltr" className="text-cyan-300 font-mono">api/data</code>) — با بک‌آپ مرورگر کاری ندارند.
+                          </li>
+                        </ul>
+                        <p className="text-[11px] text-amber-300 leading-relaxed">
+                          ⚠️ پاک کردن دیتای مرورگر (Clear browsing data) نسخه‌های جدول را پاک می‌کند — برای همین همیشه یک فایل بک‌آپ تازه جای امن داشته باش.
                         </p>
                       </div>
                     </div>

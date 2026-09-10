@@ -25,7 +25,8 @@ export const TaxonomyManagerModal = ({
     addTaxonomyOption,
     deleteTaxonomyOption,
     autoTranslateFaToEn,
-    showToast
+    showToast,
+    showConfirmDialog
   } = useData();
 
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -120,9 +121,13 @@ export const TaxonomyManagerModal = ({
   };
 
   const handleDelete = (opt) => {
-    if (window.confirm(`آیا از حذف گزینه «${opt.labelFa}» مطمئن هستید؟`)) {
-      deleteTaxonomyOption(activeTab, opt.id);
-    }
+    showConfirmDialog({
+      type: 'danger',
+      title: 'حذف گزینه؟',
+      message: `گزینه «${opt.labelFa}» حذف می‌شود. اگر در بردها استفاده شده باشد، آن‌ها دست‌نخورده می‌مانند ولی این گزینه از فهرست می‌رود.`,
+      confirmText: 'بله، حذف کن',
+      onConfirm: () => deleteTaxonomyOption(activeTab, opt.id),
+    });
   };
 
   return (

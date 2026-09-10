@@ -140,6 +140,7 @@ Whenever you write or modify code, adhere strictly to these 21 constraints, prov
 - تغییرنام/حذف فیلدهای persisted (سازگاری `localStorage` کاربر می‌شکند) — فقط **افزودن** فیلد با مقدار پیش‌فرض مجاز است.
 - ویرایش موازی یک فایل توسط دو ایجنت (حتی با ابزارهای مختلف — گیت همان‌قدر قاطی می‌کند).
 - تولید OTP سمت کلاینت، نمایش کد روی صفحه، یا فرستادن OTP از واسطه خارجی.
+- هیچ `window.confirm`/`window.alert` جدید — تاییدها فقط با `showConfirmDialog` سراسری و پیام‌ها فقط با `showToast` (صف‌دار، حداکثر ۳تایی).
 - دست‌کاری `dist/` یا `site-upload.zip` در برنچ کاری.
 
 ### 👤 خط کاربر (User Lane — محتوازنی همزمان با کدنویسی)
@@ -177,3 +178,4 @@ grep -n "YourNewIdentifier" src/path/ToFile.jsx
 - [ ] شناسه‌های جدید در هر فایل لمس‌شده با grep تعریف/استفاده راستی‌آزمایی شده باشند.
 - [ ] اگر فایل مشترک (مثل `DataContext.jsx` یا `auth.php`) لمس شده، برنچ با `main` سینک و کانفلیکت حل شده باشد.
 - [ ] `dist/` و `site-upload.zip` دستی ویرایش نشده باشند (فقط اینتگریتور ری‌بیلد می‌کند).
+- [ ] اکشن‌های جدید پیام موفقیت/خطا (`showToast`) و عملیات‌های مخرب دیالوگ تایید (`showConfirmDialog`) دارند؛ هیچ `window.confirm`/`window.alert` جدیدی اضافه نشده باشد.

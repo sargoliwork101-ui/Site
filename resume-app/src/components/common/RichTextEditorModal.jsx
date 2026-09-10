@@ -37,6 +37,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { sanitizeSvgDataUrl, sanitizeText, validateUploadFile } from '../../utils/security';
+import { useData } from '../../context/DataContext';
 
 export const RichTextEditorModal = ({
   isOpen,
@@ -48,6 +49,7 @@ export const RichTextEditorModal = ({
   language = 'fa',
   readOnly = false
 }) => {
+  const { showToast } = useData(); // admin-only modal, always inside DataProvider
   const [content, setContent] = useState(initialValue);
   const [viewMode, setViewMode] = useState('wysiwyg'); // 'wysiwyg' | 'source'
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -192,7 +194,7 @@ export const RichTextEditorModal = ({
     if (!file) return;
     const validation = validateUploadFile(file, { maxSizeMB: 5 });
     if (!validation.valid) {
-      window.alert(validation.error || 'Invalid image file.');
+      showToast(validation.error || 'Invalid image file.', 'error');
       e.target.value = '';
       return;
     }
