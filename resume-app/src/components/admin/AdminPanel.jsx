@@ -826,6 +826,7 @@ export const AdminPanel = () => {
       }
     } catch (err) {
       console.error(err);
+      showToast((err && err.message) || 'آپلود تصویر ناموفق بود.', 'error');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -845,6 +846,7 @@ export const AdminPanel = () => {
       }
     } catch (err) {
       console.error(err);
+      showToast((err && err.message) || 'آپلود فایل ناموفق بود.', 'error');
     } finally {
       setIsUploading(false);
       if (docInputRef.current) docInputRef.current.value = '';

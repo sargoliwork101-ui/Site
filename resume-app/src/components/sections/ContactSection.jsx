@@ -189,8 +189,10 @@ export const ContactSection = () => {
       attachment: attachmentMeta,
     });
 
-    // 2. Email the admin: prefer OUR OWN server (private + reliable),
-    // fall back to the FormSubmit relay only without a backend.
+    // 2. Email the admin: prefer OUR OWN server (private + reliable), fall
+    // back to the FormSubmit relay when there is no backend OR our server
+    // mail fails. The result is AWAITED and REPORTED HONESTLY — the success
+    // screen must never show when nothing was actually delivered.
     // (Contact messages only — OTP codes NEVER go through third parties.)
     const dispatchEmail = async () => {
       if (backend?.available) {
@@ -206,64 +208,84 @@ export const ContactSection = () => {
             attachmentName: attachment ? attachment.name : '',
             website_bot_trap: '',
           });
-          if (r && r.ok) return; // delivered by our own host
+          if (r && r.ok) return true; // delivered by our own host
           console.warn('Server mail failed, trying fallback:', r && r.error);
         } catch (err) {
           console.warn('Server mail error, trying fallback:', err);
         }
       }
       try {
-        await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            _subject: `⚡ پیام جدید از سایت پورتفولیو: ${cleanSubject}`,
-            'نام فرستنده': cleanName,
-            'ایمیل فرستنده': cleanEmail,
-            'تلفن فرستنده': cleanPhone || '—',
-            'سازمان / شرکت': cleanCompany || 'شخصی',
-            'موضوع': cleanSubject,
-            'متن پیام': cleanMessage,
-            'فایل پیوست': attachment ? `${attachment.name} (${Math.ceil(attachment.size / 1024)} KB)` : '—',
-            _template: 'table',
-            _captcha: 'false',
-          }),
-        });
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15000);
+        let res = null;
+        try {
+          res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(recipientEmail)}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              _subject: `⚡ پیام جدید از سایت پورتفولیو: ${cleanSubject}`,
+              'نام فرستنده': cleanName,
+              'ایمیل فرستنده': cleanEmail,
+              'تلفن فرستنده': cleanPhone || '—',
+              'سازمان / شرکت': cleanCompany || 'شخصی',
+              'موضوع': cleanSubject,
+              'متن پیام': cleanMessage,
+              'فایل پیوست': attachment ? `${attachment.name} (${Math.ceil(attachment.size / 1024)} KB)` : '—',
+              _template: 'table',
+              _captcha: 'false',
+            }),
+            signal: ctrl.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        if (res && res.ok) return true;
+        console.warn('Fallback email rejected:', res && res.status);
+        return false;
       } catch (err) {
         console.warn('Fallback email dispatch error:', err);
+        return false;
       }
     };
-    dispatchEmail();
+    const delivered = await dispatchEmail();
+    setIsSubmitting(false);
+    if (!delivered) {
+      // The message is saved in THIS browser only — tell the truth and keep
+      // the form so the visitor can retry or email directly.
+      showToast(
+        isFa
+          ? 'ارسال پیام به مدیر ناموفق بود؛ لطفاً دوباره تلاش کنید یا مستقیم به ایمیل پیام بدهید.'
+          : 'Delivery failed; please try again or email directly.',
+        'error'
+      );
+      return;
+    }
+    setSubmitted(true);
 
-    setTimeout(async () => {
-      setIsSubmitting(false);
-      setSubmitted(true);
-
-      try {
-        const confettiModule = await import('canvas-confetti');
-        const confetti = confettiModule.default || confettiModule;
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      } catch (err) {}
-
-      setFormData({
-        name: '',
-        email: '',
-        company: '',
-        subject: isFa ? 'طراحی برد جدید (PCB Design)' : 'New Hardware PCB Project',
-        message: '',
-        phone: '',
-        website_bot_trap: '',
+    try {
+      const confettiModule = await import('canvas-confetti');
+      const confetti = confettiModule.default || confettiModule;
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
       });
-      setAttachment(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }, 400);
+    } catch (err) {}
+
+    setFormData({
+      name: '',
+      email: '',
+      company: '',
+      subject: isFa ? 'طراحی برد جدید (PCB Design)' : 'New Hardware PCB Project',
+      message: '',
+      phone: '',
+      website_bot_trap: '',
+    });
+    setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const copyEmail = async () => {
@@ -430,7 +452,7 @@ END:VCARD`;
                   </h3>
                   <p className="text-slate-400 text-sm max-w-md mx-auto">
                     {isFa
-                      ? 'با تشکر از تماس شما. پیام مستقیماً در پنل مدیریت ثبت گردید و به زودی به آدرس ایمیل شما پاسخ داده خواهد شد.'
+                      ? 'با تشکر از تماس شما. پیام شما ارسال شد و به‌زودی به آدرس ایمیل شما پاسخ داده خواهد شد.'
                       : 'Thank you for reaching out. Your message has been logged securely, and I will get back to you shortly.'}
                   </p>
                   <button

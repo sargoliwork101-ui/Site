@@ -54,6 +54,9 @@ function sec_session_start() {
     $_SESSION = array();
     if (session_status() === PHP_SESSION_ACTIVE) { @session_destroy(); }
     if (session_status() === PHP_SESSION_NONE) { @session_start(); }
+    // Fresh ID for the replacement session (fixation hygiene: the old ID may
+    // have been exposed while the expired session was still lying around).
+    if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
   }
   $_SESSION['last'] = $now;
   if (!isset($_SESSION['created'])) { $_SESSION['created'] = $now; }

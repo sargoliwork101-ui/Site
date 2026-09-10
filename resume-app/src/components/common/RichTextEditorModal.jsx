@@ -167,7 +167,7 @@ export const RichTextEditorModal = ({
             setContent(convertedHtml);
           }
         } catch (err) {
-          alert('خطا در خواندن فایل ورد DOCX. لطفاً فایل معتبر انتخاب کنید.');
+          showToast('خطا در خواندن فایل ورد DOCX. لطفاً فایل معتبر انتخاب کنید.', 'error');
         }
       };
       reader.readAsArrayBuffer(file);
@@ -313,15 +313,15 @@ export const RichTextEditorModal = ({
   const handleReplaceAll = () => {
     if (!findQuery) return;
     if (viewMode === 'wysiwyg' && editorRef.current) {
-      const regex = new RegExp(findQuery, 'gi');
+      const regex = new RegExp(findQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       const updated = editorRef.current.innerHTML.replace(regex, replaceQuery);
       editorRef.current.innerHTML = updated;
       handleContentChange();
     } else {
-      const regex = new RegExp(findQuery, 'gi');
+      const regex = new RegExp(findQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       setContent((prev) => prev.replace(regex, replaceQuery));
     }
-    alert(`تمام موارد «${findQuery}» با «${replaceQuery}» جایگزین شدند.`);
+    showToast(`تمام موارد «${findQuery}» با «${replaceQuery}» جایگزین شدند.`);
   };
 
   // Export File (DOC / HTML / TXT)
@@ -513,7 +513,7 @@ export const RichTextEditorModal = ({
                         }
                       }
                     }).catch(() => {
-                      alert('لطفاً متن را کپی کرده و با فشردن کلید Ctrl+V در صفحه جای‌گذاری نمایید.');
+                      showToast('لطفاً متن را کپی کرده و با فشردن کلید Ctrl+V در صفحه جای‌گذاری نمایید.', 'info');
                     });
                   }}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700"

@@ -44,7 +44,9 @@ if (!is_dir(UPLOADS_DIR) || !is_writable(UPLOADS_DIR)) api_fail('storage_unavail
 // Runtime guards (also shipped in git — some upload tools skip dotfiles)
 $ht = UPLOADS_DIR . '/.htaccess';
 if (!is_file($ht)) {
-  @file_put_contents($ht, "<FilesMatch \"\\.(php|phtml|phar|cgi|pl|py|sh)$\">\n  Require all denied\n</FilesMatch>\nOptions -Indexes -ExecCGI\nphp_flag engine off\n<IfModule mod_headers.c>\n  Header set X-Content-Type-Options \"nosniff\"\n</IfModule>\n");
+  // IfModule-guarded throughout (mirrors the shipped file): bare php_flag/
+  // Require/Options directives 500 the whole directory on minimal hosts.
+  @file_put_contents($ht, "<IfModule mod_authz_core.c>\n  <FilesMatch \"\.(php|phtml|phar|cgi|pl|py|sh)$\">\n    Require all denied\n  </FilesMatch>\n</IfModule>\n<IfModule !mod_authz_core.c>\n  <FilesMatch \"\.(php|phtml|phar|cgi|pl|py|sh)$\">\n    Order Allow,Deny\n    Deny from all\n  </FilesMatch>\n</IfModule>\n<IfModule mod_php.c>\n  php_flag engine off\n</IfModule>\n<IfModule mod_php7.c>\n  php_flag engine off\n</IfModule>\n<IfModule mod_php8.c>\n  php_flag engine off\n</IfModule>\n<IfModule php_module>\n  php_flag engine off\n</IfModule>\n<IfModule mod_headers.c>\n  Header set X-Content-Type-Options \"nosniff\"\n</IfModule>\n");
 }
 $idx = UPLOADS_DIR . '/index.php';
 if (!is_file($idx)) {

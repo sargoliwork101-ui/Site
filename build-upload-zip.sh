@@ -19,8 +19,17 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
 cp -r dist/. "$STAGE"/
+# dist/ already contains api/ (Vite copies public/*) — remove it first, or
+# `cp -r public/api $STAGE/api` nests INTO it and ships a shadow api/api tree
+# (whose auth.php would even run setup against its own empty data dir!).
+rm -rf "$STAGE"/api
 cp -r public/api "$STAGE"/api
 cp public/.htaccess "$STAGE"/.htaccess
+# Runtime data must NEVER ship (dev leftovers, if any): secrets, sessions,
+# server backups and uploaded attachments stay on their own host.
+rm -f "$STAGE"/api/data/*.json "$STAGE"/api/data/backups/*.json
+rm -rf "$STAGE"/api/data/sessions
+find "$STAGE/uploads" -type f ! -name '.htaccess' ! -name 'index.php' -delete
 
 rm -f "$ROOT/site-upload.zip"
 cd "$STAGE"

@@ -34,7 +34,9 @@ import {
   isLocalPasswordHash,
   hasWebCrypto,
   copyTextToClipboard,
-  needsLocalRehash
+  needsLocalRehash,
+  validateUploadFile,
+  sanitizeSvgDataUrl
 } from '../utils/security';
 import {
   fetchServerStatus,
@@ -947,16 +949,49 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
   // 7. MEDIA LIBRARY & UPLOADS
   // --------------------------------------------------------------------------
-  const uploadMediaFile = (fileObj) => {
+  // Media upload: accepts a RAW File/Blob (panel file inputs) or a legacy
+  // descriptor {name, url, ...}. Raw files are validated (type/size), read as
+  // data URLs, and SVGs are script-stripped. Throws a Persian Error on any
+  // failure so callers can toast it (never a silent broken entry).
+  const uploadMediaFile = async (fileObj, category) => {
+    let desc = fileObj;
+    if (typeof Blob !== 'undefined' && fileObj instanceof Blob) {
+      const v = validateUploadFile(fileObj, { maxSizeMB: 10 });
+      if (!v.valid) throw new Error(v.error || 'فایل نامعتبر است.');
+      let url = '';
+      try {
+        url = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('read_failed'));
+          reader.readAsDataURL(fileObj);
+        });
+      } catch (e) {
+        throw new Error('خطا در خواندن فایل.');
+      }
+      if (typeof url !== 'string' || !url.startsWith('data:')) {
+        throw new Error('خطا در خواندن فایل.');
+      }
+      if (url.startsWith('data:image/svg+xml')) url = sanitizeSvgDataUrl(url);
+      const bytes = fileObj.size || 0;
+      desc = {
+        name: fileObj.name,
+        url,
+        type: fileObj.type,
+        size: bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.ceil(bytes / 1024))} KB`,
+        category,
+      };
+    }
     const newMedia = {
       id: `media-${Date.now()}`,
-      name: sanitizeFileName(fileObj.name || 'uploaded_image.jpg'),
-      url: fileObj.url,
-      type: fileObj.type || 'image/jpeg',
-      size: fileObj.size || '150 KB',
+      name: sanitizeFileName(desc.name || 'uploaded_image.jpg'),
+      url: desc.url,
+      type: desc.type || 'image/jpeg',
+      size: desc.size || '150 KB',
       date: new Date().toLocaleDateString('fa-IR'),
-      category: fileObj.category || 'عمومی',
+      category: desc.category || category || 'عمومی',
     };
+    if (!newMedia.url) throw new Error('فایل بدون آدرس است؛ دوباره تلاش کنید.');
 
     setData((prev) => ({
       ...prev,
@@ -1366,7 +1401,8 @@ export const DataProvider = ({ children }) => {
       messages: [newMsg, ...(prev.messages || [])],
     }));
 
-    showToast('پیام شما با موفقیت ارسال گردید و به ایمیل مدیر ارسال شد.');
+    // NOTE: no success toast here — the contact form owns delivery feedback
+    // (local save ≠ delivered); it toasts the real outcome after dispatch.
     return { success: true };
   };
 
@@ -2337,7 +2373,7 @@ export const DataProvider = ({ children }) => {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, users, adminSecurity, autoBackup.enabled, autoBackup.days]);
+  }, [data, users, adminSecurity, autoBackup.enabled, autoBackup.days, backend.available, backend.authenticated]);
 
   // Browser storage meter for the backup tab (UTF-16 ≈ 2 bytes/char, ~5MB cap)
   const getStorageUsage = () => {

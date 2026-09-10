@@ -409,6 +409,10 @@ switch ($action) {
   }
 
   case 'reset-password': {
+    // The token is 256-bit (unguessable), but throttle anyway so token
+    // probing / log spam is capped like every other sensitive endpoint.
+    list($allowed, $retry) = rate_limit('resetpw:' . $ip, RL_OTP_VERIFY[0], RL_OTP_VERIFY[1]);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
     $token = $in['token'] ?? '';
     $pw = $in['newPassword'] ?? '';
     if (!valid_password($pw)) api_fail('weak_password');

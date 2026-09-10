@@ -1,10 +1,32 @@
 # Contact attachments: listable by NOBODY, executable by NOTHING.
 # Files have unguessable 32-hex names; only the admin inbox links to them.
-<FilesMatch "\.(php|phtml|phar|cgi|pl|py|sh)$">
-  Require all denied
-</FilesMatch>
-Options -Indexes -ExecCGI
-php_flag engine off
+# NOTE: every stanza is IfModule-guarded — a bare `php_flag`/`Require` on a
+# host without that module turns the WHOLE directory into "500 Internal
+# Error". (Directory listings are already blocked by index.php, so no
+# `Options` line: on hosts with limited AllowOverride it would 500 too.)
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(php|phtml|phar|cgi|pl|py|sh)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+  <FilesMatch "\.(php|phtml|phar|cgi|pl|py|sh)$">
+    Order Allow,Deny
+    Deny from all
+  </FilesMatch>
+</IfModule>
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+  php_flag engine off
+</IfModule>
+<IfModule php_module>
+  php_flag engine off
+</IfModule>
 <IfModule mod_headers.c>
   Header set X-Content-Type-Options "nosniff"
 </IfModule>
