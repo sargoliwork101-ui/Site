@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ffcc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='20' rx='5' ry='5'></rect><path d='M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z'></path><line x1='17.5' y1='6.5' x2='17.51' y2='6.5'></line></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Perf: warm up the default cover-image CDN so hero images start sooner -->
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
     <!-- Defense-in-depth: no inline scripts exist in this build, so block them
          entirely (kills most stored-XSS payloads). Inline STYLES are required
          by React, hence 'unsafe-inline' for style-src only. On the live host,

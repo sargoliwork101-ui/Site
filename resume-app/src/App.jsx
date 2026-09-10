@@ -12,12 +12,19 @@ import { ArticlesSection } from './components/sections/ArticlesSection';
 import { SkillsSection } from './components/sections/SkillsSection';
 import { ExperienceSection } from './components/sections/ExperienceSection';
 import { ContactSection } from './components/sections/ContactSection';
-import { GlobalSearchModal } from './components/modals/GlobalSearchModal';
-import { BoardModal } from './components/modals/BoardModal';
-import { ArticleModal } from './components/modals/ArticleModal';
-import { BlogModal } from './components/modals/BlogModal';
-
 // Code-split heavy interactive modals & admin modules for maximum initial speed
+const GlobalSearchModal = lazy(() =>
+  import('./components/modals/GlobalSearchModal').then((m) => ({ default: m.GlobalSearchModal }))
+);
+const BoardModal = lazy(() =>
+  import('./components/modals/BoardModal').then((m) => ({ default: m.BoardModal }))
+);
+const ArticleModal = lazy(() =>
+  import('./components/modals/ArticleModal').then((m) => ({ default: m.ArticleModal }))
+);
+const BlogModal = lazy(() =>
+  import('./components/modals/BlogModal').then((m) => ({ default: m.BlogModal }))
+);
 const TemplatePickerModal = lazy(() =>
   import('./components/modals/TemplatePickerModal').then((m) => ({ default: m.TemplatePickerModal }))
 );
@@ -42,6 +49,10 @@ function MainLayout() {
     isLoginModalOpen,
     isPdfModalOpen,
     isTemplatePickerOpen,
+    isSearchModalOpen,
+    selectedBoard,
+    selectedArticle,
+    isBlogModalOpen,
     currentView,
     dialogState,
     closeDialog
@@ -90,11 +101,13 @@ function MainLayout() {
         </>
       )}
 
-      {/* Lightweight Shared Modals */}
-      <GlobalSearchModal />
-      <BoardModal />
-      <ArticleModal />
-      <BlogModal />
+      {/* Lazy Shared Modals (code-split; mounted only when opened) */}
+      <Suspense fallback={null}>
+        {isSearchModalOpen && <GlobalSearchModal />}
+        {selectedBoard && <BoardModal />}
+        {selectedArticle && <ArticleModal />}
+        {isBlogModalOpen && <BlogModal />}
+      </Suspense>
       <Toast />
 
       {/* Global Persian Action & Confirmation Dialog Modal */}

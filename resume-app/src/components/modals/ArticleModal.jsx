@@ -126,6 +126,7 @@ export const ArticleModal = () => {
               <img
                 src={selectedArticle.coverImage}
                 alt={selectedArticle.titleFa}
+                decoding="async"
                 className="w-full h-full object-cover"
               />
             </div>

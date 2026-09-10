@@ -236,6 +236,8 @@ export const ExperienceSection = () => {
                               <img
                                 src={exp.companyLogo}
                                 alt={exp.companyEn}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-full h-full object-cover"
                               />
                             ) : (
@@ -257,7 +259,7 @@ export const ExperienceSection = () => {
                                 {isFa ? exp.companyFa : exp.companyEn}
                               </span>
                               <span className="text-slate-600">·</span>
-                              <span className="text-slate-400 font-normal">{isFa ? exp.typeFa : exp.typeEn}</span>
+                              <span className="text-slate-400 font-medium">{isFa ? exp.typeFa : exp.typeEn}</span>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1 font-mono">

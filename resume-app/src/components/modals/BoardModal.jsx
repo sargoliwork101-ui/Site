@@ -125,6 +125,7 @@ export const BoardModal = () => {
                   src={selectedBoard.image}
                   alt={isFa ? selectedBoard.titleFa : selectedBoard.titleEn}
                   draggable="false"
+                  decoding="async"
                   onContextMenu={(e) => e.preventDefault()}
                   className="w-full h-full object-cover pointer-events-none select-none transition-transform duration-500 group-hover:scale-105"
                 />

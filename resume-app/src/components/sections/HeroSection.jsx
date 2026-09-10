@@ -117,7 +117,7 @@ export const HeroSection = () => {
               <h1 className={`text-3xl sm:text-5xl lg:text-6xl font-black text-white text-balance break-words ${isFa ? 'tracking-normal leading-[1.9]' : 'tracking-tight leading-tight'}`}>
                 {isFa ? info.fullNameFa : info.fullNameEn}
                 <span
-                  className={`block mt-2 pb-1 text-2xl sm:text-3xl lg:text-4xl font-extrabold break-words ${isFa ? 'tracking-normal leading-[1.9]' : 'tracking-tight'}`}
+                  className={`block mt-2 pb-1 text-2xl sm:text-3xl lg:text-4xl font-black break-words ${isFa ? 'tracking-normal leading-[1.9]' : 'tracking-tight'}`}
                   style={{
                     background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor}, #ffffff)`,
                     WebkitBackgroundClip: 'text',
@@ -262,6 +262,8 @@ export const HeroSection = () => {
                         src={featuredBoard.image || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80'}
                         alt={isFa ? featuredBoard.titleFa : featuredBoard.titleEn}
                         draggable="false"
+                        fetchPriority="high"
+                        decoding="async"
                         onContextMenu={(e) => e.preventDefault()}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-108 pointer-events-none select-none"
                       />
@@ -335,7 +337,7 @@ export const HeroSection = () => {
                   /* Fallback Profile Card if no boards exist */
                   <div className="relative rounded-2xl p-6 backdrop-blur-xl border border-slate-800 bg-slate-950/90 text-center space-y-4">
                     <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-cyan-400 shadow-xl">
-                      <img src={info.avatar} alt={info.fullNameEn} className="w-full h-full object-cover" />
+                      <img src={info.avatar} alt={info.fullNameEn} decoding="async" className="w-full h-full object-cover" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-white">{isFa ? info.fullNameFa : info.fullNameEn}</h3>
@@ -469,6 +471,8 @@ export const HeroSection = () => {
                   src={featuredBoard.image || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80'}
                   alt={isFa ? featuredBoard.titleFa : featuredBoard.titleEn}
                   draggable="false"
+                  fetchPriority="high"
+                  decoding="async"
                   onContextMenu={(e) => e.preventDefault()}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none select-none"
                 />
