@@ -17,6 +17,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initialData } from '../data/defaultData';
+import { storage, sessionStore, isPersistentStorageBlocked } from '../utils/safeStorage';
 import { TEMPLATES, TEMPLATES_MAP, DEFAULT_TEMPLATE } from '../data/templates';
 import { autoTranslateFaToEn } from '../utils/translatorHelper';
 import {
@@ -69,15 +70,11 @@ const ADMIN_PASSWORD_KEY = 'embedded_admin_pwd';
 // SECURITY: the login flag + current user live in sessionStorage (cleared when
 // the tab closes) — never in persistent localStorage. On real hosting the
 // server-side PHP session is the source of truth; this is only a UI mirror.
-const sessionGet = (k) => {
-  try { return sessionStorage.getItem(k); } catch (e) { return null; }
-};
-const sessionSet = (k, v) => {
-  try { sessionStorage.setItem(k, v); } catch (e) { /* private mode */ }
-};
-const sessionDel = (k) => {
-  try { sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
-};
+// Memory-backed: in browsers that block storage, the login flag still lives
+// for the tab instead of vanishing (safeStorage falls back to a Map).
+const sessionGet = (k) => sessionStore.get(k);
+const sessionSet = (k, v) => sessionStore.set(k, v);
+const sessionDel = (k) => sessionStore.remove(k);
 const ADMIN_SECURITY_KEY = 'embedded_admin_security_v3';
 const USERS_KEY = 'embedded_portfolio_users_v3';
 const CURRENT_USER_KEY = 'embedded_portfolio_current_user_v3';
@@ -378,7 +375,7 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
   const [data, setData] = useState(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = storage.get(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         const cleanParsed = sanitizeBackupPayload(parsed);
@@ -456,7 +453,7 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
   const [snapshots, setSnapshots] = useState(() => {
     try {
-      const saved = localStorage.getItem(SNAPSHOTS_KEY);
+      const saved = storage.get(SNAPSHOTS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -484,7 +481,7 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
   const [adminSecurity, setAdminSecurity] = useState(() => {
     try {
-      const saved = localStorage.getItem(ADMIN_SECURITY_KEY);
+      const saved = storage.get(ADMIN_SECURITY_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         // SECURITY: OTP material is NEVER restored from storage (memory-only).
@@ -498,7 +495,7 @@ export const DataProvider = ({ children }) => {
       console.error('Failed to parse admin security', e);
     }
 
-    const savedPassword = localStorage.getItem(ADMIN_PASSWORD_KEY) || 'admin';
+    const savedPassword = storage.get(ADMIN_PASSWORD_KEY) || 'admin';
     return {
       password: savedPassword,
       recoveryEmail: initialData.personalInfo?.email || 'arash.taheri.hardware@gmail.com',
@@ -514,7 +511,7 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
   const [users, setUsers] = useState(() => {
     try {
-      const saved = localStorage.getItem(USERS_KEY);
+      const saved = storage.get(USERS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -755,7 +752,7 @@ export const DataProvider = ({ children }) => {
       // Unix SECONDS (PHP time()) — milliseconds would always fail the
       // server's timestamp check and every push would be rejected.
       const stamped = { ...data, updatedAt: Math.floor(Date.now() / 1000) };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stamped));
+      storage.set(STORAGE_KEY, JSON.stringify(stamped));
       if (syncAdoptRef.current) { syncAdoptRef.current = false; return; }
       if (!backend?.available) { syncDirtyRef.current = true; return; } // pure local: nothing to sync to
       if (!backend?.authenticated) {
@@ -779,7 +776,7 @@ export const DataProvider = ({ children }) => {
   // Persist snapshots (quota-aware: warn once per session, never crash)
   useEffect(() => {
     try {
-      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snapshots));
+      storage.set(SNAPSHOTS_KEY, JSON.stringify(snapshots));
     } catch (e) {
       console.error('Failed to persist snapshots', e);
       if (!quotaWarnedRef.current) {
@@ -796,7 +793,7 @@ export const DataProvider = ({ children }) => {
     try {
       const { activeOtp, otpExpiresAt, password, ...safe } = adminSecurity || {};
       void activeOtp; void otpExpiresAt; void password;
-      localStorage.setItem(ADMIN_SECURITY_KEY, JSON.stringify(safe));
+      storage.set(ADMIN_SECURITY_KEY, JSON.stringify(safe));
     } catch (e) {
       console.error('Failed to persist admin security', e);
     }
@@ -805,7 +802,7 @@ export const DataProvider = ({ children }) => {
   // Persist Users list
   useEffect(() => {
     try {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+      storage.set(USERS_KEY, JSON.stringify(users));
     } catch (e) {
       console.error('Failed to persist users', e);
     }
@@ -1117,7 +1114,7 @@ export const DataProvider = ({ children }) => {
     setData((prev) => {
       let likedIds = [];
       try {
-        likedIds = JSON.parse(localStorage.getItem('liked_blog_posts') || '[]');
+        likedIds = JSON.parse(storage.get('liked_blog_posts') || '[]');
       } catch (e) {}
 
       const alreadyLiked = Array.isArray(likedIds) && likedIds.includes(postId);
@@ -1129,7 +1126,7 @@ export const DataProvider = ({ children }) => {
         isNowLiked = true;
       }
       try {
-        localStorage.setItem('liked_blog_posts', JSON.stringify(likedIds));
+        storage.set('liked_blog_posts', JSON.stringify(likedIds));
       } catch (e) {}
 
       const updatedPosts = (prev.blogPosts || []).map((p) => {
@@ -1494,7 +1491,7 @@ export const DataProvider = ({ children }) => {
           let localTs = 0;
           let rawLocal = null;
           try {
-            rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            rawLocal = JSON.parse(storage.get(STORAGE_KEY) || '{}');
             localTs = normTs(rawLocal && rawLocal.updatedAt);
           } catch (e) { rawLocal = null; /* treat as no local copy */ }
           if (hasServer && serverTs > localTs) {
@@ -1519,7 +1516,7 @@ export const DataProvider = ({ children }) => {
   // Factory-default password verdict (computed from PRE-migration values once)
   const [localPwIsDefault, setLocalPwIsDefault] = useState(() => {
     try {
-      const raw = localStorage.getItem(USERS_KEY);
+      const raw = storage.get(USERS_KEY);
       if (!raw) return true; // fresh install → default 'admin'
       const list = JSON.parse(raw);
       const a = Array.isArray(list) ? list.find((u) => u && u.username === 'admin') : null;
@@ -1537,10 +1534,15 @@ export const DataProvider = ({ children }) => {
   //  3. Hash every plaintext local password (PBKDF2) and blank legacy copies.
   useEffect(() => {
     try {
-      localStorage.removeItem(AUTH_KEY);
-      localStorage.removeItem(CURRENT_USER_KEY);
-      localStorage.removeItem(ADMIN_PASSWORD_KEY);
+      storage.remove(AUTH_KEY);
+      storage.remove(CURRENT_USER_KEY);
+      storage.remove(ADMIN_PASSWORD_KEY);
     } catch (e) { /* ignore */ }
+    try {
+      if (isPersistentStorageBlocked()) {
+        showToast('این مرورگر ذخیره‌سازی محلی را مسدود کرده؛ تغییرات فقط تا بستن تب حفظ می‌شود و بین دستگاه‌ها سینک نمی‌شود. برای حالت عادی، کوکی‌ها/ذخیره‌سازی سایت را مجاز کنید.', 'warning');
+      }
+    } catch (e) { /* toast is best-effort */ }
     refreshBackend();
     (async () => {
       try {
@@ -2126,7 +2128,7 @@ export const DataProvider = ({ children }) => {
 
   const getLocalSecQaQuestions = () => {
     try {
-      const raw = JSON.parse(localStorage.getItem(LOCAL_SECQA_KEY) || '[]');
+      const raw = JSON.parse(storage.get(LOCAL_SECQA_KEY) || '[]');
       return Array.isArray(raw) ? raw.map((r) => r.q).filter(Boolean) : [];
     } catch { return []; }
   };
@@ -2141,7 +2143,7 @@ export const DataProvider = ({ children }) => {
       hashed.push({ q: p.q, h: await hashPasswordLocal(p.a.toLowerCase()) });
     }
     try {
-      localStorage.setItem(LOCAL_SECQA_KEY, JSON.stringify(hashed));
+      storage.set(LOCAL_SECQA_KEY, JSON.stringify(hashed));
       showToast('سؤالات بازیابی محلی ذخیره شد ✅');
       return true;
     } catch { return false; }
@@ -2149,7 +2151,7 @@ export const DataProvider = ({ children }) => {
 
   const verifyLocalSecQa = async (answers) => {
     try {
-      const raw = JSON.parse(localStorage.getItem(LOCAL_SECQA_KEY) || '[]');
+      const raw = JSON.parse(storage.get(LOCAL_SECQA_KEY) || '[]');
       if (!Array.isArray(raw) || raw.length < 2) return false;
       for (let i = 0; i < raw.length; i++) {
         const given = String(answers?.[i] || '').trim().toLowerCase();
@@ -2193,7 +2195,7 @@ export const DataProvider = ({ children }) => {
     // Interval is DAYS (1..30). Migrates the old minutes-based config once.
     const fromMinutes = (m) => Math.max(1, Math.min(30, Math.round((m || 30) / 1440) || 1));
     try {
-      const raw = JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY) || '{}');
+      const raw = JSON.parse(storage.get(AUTO_BACKUP_KEY) || '{}');
       return {
         enabled: raw.enabled !== false, // on by default
         days:
@@ -2230,7 +2232,7 @@ export const DataProvider = ({ children }) => {
   // Persist auto-backup config (a content hash is not a secret — safe to store)
   useEffect(() => {
     try {
-      localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify(autoBackup));
+      storage.set(AUTO_BACKUP_KEY, JSON.stringify(autoBackup));
     } catch (e) {
       console.error('Failed to persist auto-backup config', e);
     }
@@ -2344,7 +2346,7 @@ export const DataProvider = ({ children }) => {
     const perKey = {};
     for (const k of keys) {
       try {
-        const v = localStorage.getItem(k) || '';
+        const v = storage.get(k) || '';
         perKey[k] = v.length * 2;
         bytes += v.length * 2;
       } catch {
@@ -2438,7 +2440,7 @@ export const DataProvider = ({ children }) => {
 
   const readSecQaForBackup = () => {
     try {
-      const raw = JSON.parse(localStorage.getItem(LOCAL_SECQA_KEY) || '[]');
+      const raw = JSON.parse(storage.get(LOCAL_SECQA_KEY) || '[]');
       return Array.isArray(raw)
         ? raw.filter((r) => r && typeof r.q === 'string' && typeof r.h === 'string')
         : [];
@@ -2543,7 +2545,7 @@ export const DataProvider = ({ children }) => {
                 .filter((r) => r && typeof r.q === 'string' && typeof r.h === 'string')
                 .slice(0, 3);
               try {
-                localStorage.setItem(LOCAL_SECQA_KEY, JSON.stringify(cleanQa));
+                storage.set(LOCAL_SECQA_KEY, JSON.stringify(cleanQa));
                 if (cleanQa.length > 0) restoredExtras.push('سؤالات بازیابی');
               } catch { /* quota/private mode: content restore still succeeded */ }
             }
@@ -2593,10 +2595,10 @@ export const DataProvider = ({ children }) => {
         });
         setAutoBackup({ enabled: true, days: 7, lastRun: 0, lastSig: '', deadline: 0 });
         try {
-          localStorage.removeItem(STORAGE_KEY);
-          localStorage.removeItem(USERS_KEY);
-          localStorage.removeItem(ADMIN_SECURITY_KEY);
-          localStorage.removeItem(LOCAL_SECQA_KEY);
+          storage.remove(STORAGE_KEY);
+          storage.remove(USERS_KEY);
+          storage.remove(ADMIN_SECURITY_KEY);
+          storage.remove(LOCAL_SECQA_KEY);
         } catch { /* ignore */ }
         showToast('داده‌های سایت با موفقیت به حالت کارخانه بازنشانی شدند.');
       },

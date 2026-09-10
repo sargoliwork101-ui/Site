@@ -15,6 +15,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
+import { storage } from '../../utils/safeStorage';
 import { formatNum } from '../../utils/numberHelper';
 import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';
 import {
@@ -52,7 +53,7 @@ export const BlogModal = () => {
   // Initialize likedPosts from localStorage
   const [likedPosts, setLikedPosts] = useState(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem('liked_blog_posts') || '[]');
+      const stored = JSON.parse(storage.get('liked_blog_posts') || '[]');
       if (Array.isArray(stored)) {
         return stored.reduce((acc, id) => {
           acc[id] = true;

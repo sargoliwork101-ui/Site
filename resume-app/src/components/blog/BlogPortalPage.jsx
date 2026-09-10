@@ -22,6 +22,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
+import { storage } from '../../utils/safeStorage';
 import { CustomAudioPlayer } from '../common/CustomAudioPlayer';
 import { formatNum } from '../../utils/numberHelper';
 import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';
@@ -73,7 +74,7 @@ export const BlogPortalPage = () => {
   // Initialize likedPosts from localStorage
   const [likedPosts, setLikedPosts] = useState(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem('liked_blog_posts') || '[]');
+      const stored = JSON.parse(storage.get('liked_blog_posts') || '[]');
       if (Array.isArray(stored)) {
         return stored.reduce((acc, id) => {
           acc[id] = true;
