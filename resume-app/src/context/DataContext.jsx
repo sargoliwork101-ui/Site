@@ -49,7 +49,9 @@ import {
   serverRequestEmailChange,
   serverConfirmEmailChange,
   serverAccount,
-  serverBackupSave
+  serverBackupSave,
+  serverContentGet,
+  serverContentSave
 } from '../utils/serverAuth';
 
 const DataContext = createContext(null);
@@ -702,13 +704,53 @@ export const DataProvider = ({ children }) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Persist data whenever it changes
+  // --- Live-content sync refs (see the persist effect + refreshBackend) ---
+  const dataMountRef = useRef(true);   // skip stamping on first mount
+  const syncAdoptRef = useRef(false);  // just adopted server copy → don't echo-push
+  const syncDirtyRef = useRef(false);  // local edits not yet on the server
+  const syncWarnedRef = useRef(false); // warn once per session about sync failure
+  const CONTENT_SYNC_MAX = 12582912;   // mirrors server CONTENT_MAX_BYTES
+
+  // Best-effort publish (never throws, never blocks the local save).
+  const pushContentToServer = (stamped) => {
+    let json = '';
+    try { json = JSON.stringify(stamped); } catch (e) { return; }
+    if (json.length > CONTENT_SYNC_MAX) {
+      syncDirtyRef.current = true;
+      if (!syncWarnedRef.current) {
+        syncWarnedRef.current = true;
+        showToast('محتوا برای همگام‌سازی با سرور حجیم است.', 'warning');
+      }
+      return;
+    }
+    serverContentSave(stamped, stamped.updatedAt).then((r) => {
+      if (r && r.ok) {
+        syncDirtyRef.current = false;
+      } else {
+        syncDirtyRef.current = true;
+        if (!syncWarnedRef.current) {
+          syncWarnedRef.current = true;
+          showToast('تغییرات فقط محلی ذخیره شد؛ همگام‌سازی با سرور ناموفق بود.', 'warning');
+        }
+      }
+    }).catch(() => { syncDirtyRef.current = true; });
+  };
+
+  // Persist data whenever it changes (+ timestamp it; publish when eligible)
   useEffect(() => {
+    // First mount: storage already holds the truth — do NOT re-stamp (a fresh
+    // stamp here would fake "local is newest" and block adopting the server).
+    if (dataMountRef.current) { dataMountRef.current = false; return; }
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      const stamped = { ...data, updatedAt: Date.now() };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stamped));
+      if (syncAdoptRef.current) { syncAdoptRef.current = false; return; }
+      if (!backend?.available || !isAuthenticated) { syncDirtyRef.current = true; return; }
+      pushContentToServer(stamped);
     } catch (e) {
       console.error('Failed to persist data', e);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   // Persist snapshots (quota-aware: warn once per session, never crash)
@@ -1416,6 +1458,33 @@ export const DataProvider = ({ children }) => {
           return prev;
         });
       }
+      // Live-content sync: adopt the server copy when it is newer (published
+      // from another device), or publish ours when WE are newer and authed.
+      try {
+        const srv = await serverContentGet();
+        if (srv && srv.ok && !srv.empty && srv.content && typeof srv.content === 'object') {
+          let localTs = 0;
+          try {
+            const rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            localTs = (rawLocal && typeof rawLocal.updatedAt === 'number') ? rawLocal.updatedAt : 0;
+          } catch (e) { /* treat as no local copy */ }
+          const serverTs = (typeof srv.updatedAt === 'number') ? srv.updatedAt : 0;
+          if (serverTs > localTs) {
+            if (syncDirtyRef.current) {
+              showToast('نسخه جدیدتری روی سرور هست ولی تغییرات ذخیره‌نشده محلی دارید؛ نسخه محلی نگه داشته شد.', 'warning');
+            } else {
+              syncAdoptRef.current = true;
+              setData(srv.content);
+              showToast('آخرین نسخه محتوا از سرور بارگذاری شد ✅');
+            }
+          } else if (next.authenticated && localTs > serverTs) {
+            try {
+              const rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+              if (rawLocal && typeof rawLocal === 'object') pushContentToServer(rawLocal);
+            } catch (e) { /* non-fatal */ }
+          }
+        }
+      } catch (e) { /* content sync is best-effort; local data always works */ }
     }
     return next;
   };

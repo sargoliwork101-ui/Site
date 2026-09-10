@@ -20,6 +20,7 @@
 const AUTH_URL = 'api/auth.php';
 const CONTACT_URL = 'api/contact.php';
 const UPLOAD_URL = 'api/upload.php';
+const CONTENT_URL = 'api/content.php';
 const REQUEST_TIMEOUT_MS = 20000;
 
 async function postForm(url, action, body = {}) {
@@ -223,6 +224,38 @@ export async function serverUploadAttachment(file) {
     return { ok: false, error: 'network' };
   }
 }
+
+/**
+ * Fetch the live site content published from another device.
+ * Public endpoint — returns {ok, empty:true} when nothing was published yet.
+ */
+export async function serverContentGet() {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(`${CONTENT_URL}?action=get`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    const data = await res.json().catch(() => null);
+    if (!data || data.ok !== true) {
+      return { ok: false, error: (data && data.error) || 'no_backend' };
+    }
+    return data;
+  } catch (e) {
+    return { ok: false, error: 'network' };
+  }
+}
+
+/** Publish live site content (admin session required, enforced server-side). */
+export const serverContentSave = (content, updatedAt) =>
+  postForm(CONTENT_URL, 'save', { content, updatedAt });
 
 export const serverContact = (payload) =>
   postContact(payload);

@@ -47,6 +47,9 @@ define('RL_OTP_VERIFY', [10, 600]);
 define('RL_CONTACT', [5, 3600]);
 define('RL_UPLOAD', [5, 3600]);
 define('RL_BACKUP', [10, 3600]);      // server backup save/list/get/delete/config
+define('RL_CONTENT', [60, 3600]);       // live-content publish (authed admin)
+define('RL_CONTENT_GET', [60, 60]);     // live-content fetch (public, per IP)
+define('CONTENT_MAX_BYTES', 12582912);  // 12MB live-content cap (base64 images included)
 define('BACKUP_MAX_BYTES', 12582912); // 12MB envelope cap (base64 images included)
 define('BACKUP_KEEP_MIN', 1);
 define('BACKUP_KEEP_MAX', 10);
