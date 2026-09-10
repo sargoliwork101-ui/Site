@@ -2635,13 +2635,13 @@ export const AdminPanel = () => {
                       {data.boards.map((b) => (
                         <div
                           key={b.id}
-                          className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-4 ${
+                          className={`p-4 rounded-2xl border transition-all flex flex-wrap items-center justify-between gap-4 ${
                             b.featured
                               ? 'bg-slate-950/90 border-amber-500/50 shadow-lg shadow-amber-500/5'
                               : 'bg-slate-950/70 border-slate-800'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <img
                               src={b.image}
                               alt={b.titleFa}
@@ -3099,10 +3099,10 @@ export const AdminPanel = () => {
                       {data.articles.map((art) => (
                         <div
                           key={art.id}
-                          className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-4"
+                          className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-4"
                         >
-                          <div>
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
                               <h5 className="text-xs font-bold text-white">{art.titleFa}</h5>
                               <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-cyan-300">
                                 {art.categoryFa || art.category}
@@ -3111,7 +3111,7 @@ export const AdminPanel = () => {
                             <p className="text-[11px] text-slate-400 mt-0.5 font-mono">{art.date} - {art.readTime}</p>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <button
                               onClick={() => setArticleForm(art)}
                               className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400"
@@ -3690,10 +3690,10 @@ export const AdminPanel = () => {
                           {data.experiences.map((exp) => (
                             <div
                               key={exp.id}
-                              className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-4"
+                              className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-4"
                             >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <h5 className="text-xs font-bold text-white">{exp.roleFa}</h5>
                                   {exp.isCurrent && (
                                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
@@ -3707,7 +3707,7 @@ export const AdminPanel = () => {
                                 </p>
                               </div>
 
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 shrink-0">
                                 <button
                                   onClick={() => setExpForm(exp)}
                                   className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400"
@@ -4072,10 +4072,10 @@ export const AdminPanel = () => {
                           msg.read ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-950/90 border-cyan-500/40 shadow-lg'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
                             <span className="text-xs font-bold text-white">{msg.name}</span>
-                            <span className="text-[11px] font-mono text-cyan-400">{msg.email}</span>
+                            <span className="text-[11px] font-mono text-cyan-400 truncate min-w-0 max-w-[220px]">{msg.email}</span>
                             {msg.company && (
                               <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
                                 {msg.company}

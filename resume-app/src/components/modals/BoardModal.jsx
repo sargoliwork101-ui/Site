@@ -230,10 +230,10 @@ export const BoardModal = () => {
                         key={idx}
                         className={idx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-950/60'}
                       >
-                        <td className="p-2.5 font-semibold text-slate-400 border-b border-slate-800/60 w-1/3">
+                        <td className="p-2.5 font-semibold text-slate-400 border-b border-slate-800/60 w-1/3 break-words">
                           {key}
                         </td>
-                        <td className="p-2.5 text-slate-200 font-mono border-b border-slate-800/60">
+                        <td className="p-2.5 text-slate-200 font-mono border-b border-slate-800/60 break-all">
                           {val}
                         </td>
                       </tr>

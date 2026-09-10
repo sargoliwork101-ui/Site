@@ -218,14 +218,14 @@ END:VCARD`;
           {/* Left Column: Direct Info Cards */}
           <div className="lg:col-span-5 space-y-4">
             {/* Email Card */}
-            <div className="p-5 rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="p-5 rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="text-xs text-slate-400 font-medium">{isFa ? 'ایمیل مستقیم' : 'Direct Email'}</div>
-                  <div className="text-xs sm:text-sm font-mono text-white font-bold">{info.email}</div>
+                  <div className="text-xs sm:text-sm font-mono text-white font-bold break-all">{info.email}</div>
                 </div>
               </div>
               <button
@@ -239,14 +239,14 @@ END:VCARD`;
             </div>
 
             {/* Phone & Telegram Card */}
-            <div className="p-5 rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="p-5 rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <Phone className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="text-xs text-slate-400 font-medium">{isFa ? 'تلفن و پیام‌رسان' : 'Phone & Telegram'}</div>
-                  <div className="text-xs sm:text-sm font-mono text-white font-bold">{isFa ? info.phone : toEnglishDigits(info.phone)}</div>
+                  <div className="text-xs sm:text-sm font-mono text-white font-bold break-all">{isFa ? info.phone : toEnglishDigits(info.phone)}</div>
                 </div>
               </div>
               <a

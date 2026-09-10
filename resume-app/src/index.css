@@ -53,14 +53,15 @@
 
 /* Rich Prose / Blog & Article HTML Table & Content Styling */
 .prose table {
+  display: block;
   width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 1.25rem 0;
   font-size: 0.8125rem;
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid #334155;
   border-radius: 0.75rem;
-  overflow: hidden;
 }
 
 .prose th {

@@ -341,9 +341,9 @@ export const BlogManagementSection = () => {
       </div>
 
       {/* 3. BLOG POSTS TABLE / LIST */}
-      <div className="rounded-2xl bg-slate-950/80 border border-slate-800 overflow-hidden shadow-xl">
+      <div className="hidden md:block rounded-2xl bg-slate-950/80 border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-right rtl:text-right ltr:text-left text-xs">
+          <table className="w-full min-w-[840px] text-right rtl:text-right ltr:text-left text-xs">
             <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 font-semibold">
               <tr>
                 <th className="p-3.5">تصویر و عنوان مقاله</th>
@@ -357,31 +357,31 @@ export const BlogManagementSection = () => {
             <tbody className="divide-y divide-slate-850 text-slate-300">
               {filteredPosts.map((post) => (
                 <tr key={post.id} className="hover:bg-slate-900/50 transition-colors">
-                  <td className="p-3.5">
-                    <div className="flex items-center gap-3">
+                  <td className="p-3.5 max-w-[340px]">
+                    <div className="flex items-center gap-3 min-w-0">
                       <img
                         src={post.coverImage || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80'}
                         alt={post.titleFa}
                         className="w-12 h-9 rounded-lg object-cover border border-slate-800 shrink-0"
                       />
-                      <div>
-                        <div className="font-bold text-white line-clamp-1">{post.titleFa}</div>
-                        <div className="text-[11px] text-slate-400 font-mono line-clamp-1">{post.titleEn}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white truncate">{post.titleFa}</div>
+                        <div className="text-[11px] text-slate-400 font-mono truncate">{post.titleEn}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="p-3.5">
+                  <td className="p-3.5 whitespace-nowrap">
                     <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 text-[11px]">
                       {post.categoryFa || post.category}
                     </span>
                   </td>
-                  <td className="p-3.5 font-mono text-[11px] text-slate-400">
+                  <td className="p-3.5 font-mono text-[11px] text-slate-400 whitespace-nowrap">
                     {post.publishDate}
                   </td>
-                  <td className="p-3.5 font-mono text-[11px]">
+                  <td className="p-3.5 font-mono text-[11px] whitespace-nowrap">
                     <span className="text-amber-400">{post.views || 0}</span> / <span className="text-rose-400">{post.likes || 0}</span>
                   </td>
-                  <td className="p-3.5">
+                  <td className="p-3.5 whitespace-nowrap">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         post.status === 'published'
@@ -442,6 +442,98 @@ export const BlogManagementSection = () => {
           </table>
         </div>
       </div>
+
+      {/* 3b. MOBILE CARDS (same actions, stacked layout) */}
+      {filteredPosts.length === 0 ? (
+        <div className="p-10 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-2">
+          <Newspaper className="w-8 h-8 text-slate-600 mx-auto" />
+          <p className="text-sm font-bold text-slate-300">مقاله‌ای یافت نشد</p>
+          <p className="text-xs text-slate-500">جستجو یا فیلتر دسته را تغییر بده، یا یک مقاله جدید بنویس.</p>
+        </div>
+      ) : (
+        <div className="md:hidden space-y-2.5">
+          {filteredPosts.map((post) => (
+            <div key={post.id} className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3 shadow-lg">
+              <div className="flex items-start gap-3">
+                <img
+                  src={post.coverImage || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80'}
+                  alt={post.titleFa}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-16 h-12 rounded-lg object-cover border border-slate-800 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-white text-xs leading-relaxed line-clamp-2">{post.titleFa}</div>
+                  <div className="text-[11px] text-slate-400 font-mono truncate mt-0.5">{post.titleEn}</div>
+                </div>
+                <span
+                  className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
+                    post.status === 'published'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {post.status === 'published' ? 'منتشر شده' : 'پیش‌نویس'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 whitespace-nowrap">
+                  {post.categoryFa || post.category}
+                </span>
+                <span className="font-mono text-slate-400 whitespace-nowrap">{post.publishDate}</span>
+                <span className="font-mono whitespace-nowrap">
+                  <span className="text-amber-400">{post.views || 0}</span>
+                  <span className="text-slate-600"> بازدید / </span>
+                  <span className="text-rose-400">{post.likes || 0}</span>
+                  <span className="text-slate-600"> لایک</span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2.5 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedBlogPost(post);
+                    setIsBlogModalOpen(true);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-cyan-300 bg-slate-900 border border-slate-800"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>مشاهده</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenEdit(post)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-amber-300 bg-slate-900 border border-slate-800"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>ویرایش</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    showConfirmDialog({
+                      title: 'تایید حذف مقاله وبلاگ',
+                      message: `آیا از حذف کامل و غیرقابل‌بازگشت مقاله «${post.titleFa}» اطمینان دارید؟`,
+                      type: 'danger',
+                      confirmText: 'بله، حذف کن',
+                      cancelText: 'انصراف',
+                      onConfirm: () => {
+                        deleteBlogPost(post.id);
+                      }
+                    });
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>حذف</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* ADD / EDIT BLOG POST MODAL                                         */}
