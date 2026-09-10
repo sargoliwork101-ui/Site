@@ -22,13 +22,13 @@ export const Toast = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-2 items-end">
+    <div className="fixed inset-0 z-[10020] flex flex-col gap-2 items-center justify-center pointer-events-none px-4">
       {toasts.map((toast) => {
         const Icon = icons[toast.type] || CheckCircle2;
         return (
-          <div key={toast.id} className="animate-bounce-short">
+          <div key={toast.id} className="animate-bounce-short pointer-events-auto">
             <div
-              className={`flex items-center gap-3 px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl text-xs font-medium max-w-md cursor-pointer ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl text-xs font-medium max-w-[calc(100vw-2rem)] sm:max-w-md cursor-pointer ${
                 colors[toast.type] || colors.success
               }`}
               onClick={() => dismissToast && dismissToast(toast.id)}
