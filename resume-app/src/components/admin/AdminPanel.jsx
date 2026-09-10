@@ -1358,7 +1358,7 @@ export const AdminPanel = () => {
         {/* Main Workspace Layout (Sidebar Tabs + Content Area) */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* Sidebar Tabs */}
-          <aside className="w-full md:w-64 bg-slate-950/60 border-b md:border-b-0 md:border-l border-slate-800 p-3 space-y-1 overflow-x-auto md:overflow-y-auto shrink-0 flex md:flex-col flex-row">
+          <aside className="w-full md:w-64 lg:w-72 bg-slate-950/60 border-b md:border-b-0 md:border-l border-slate-800 p-3 space-y-1 overflow-x-auto md:overflow-y-auto shrink-0 flex md:flex-col flex-row">
             {filteredTabs.map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
@@ -1371,28 +1371,32 @@ export const AdminPanel = () => {
                     setArticleForm(null);
                     setExpForm(null);
                   }}
-                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 w-auto md:w-full ${
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 w-auto md:w-full text-right ${
                     active
                       ? 'bg-cyan-500 text-slate-950 font-bold shadow-md'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="w-4 h-4" />
-                    <span>{tab.label}</span>
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="leading-5">{tab.label}</span>
                   </div>
-                  {tab.badge && (
-                    <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.2 rounded-full font-bold">
-                      {tab.badge}
-                    </span>
-                  )}
-                  {tab.count !== undefined && (
-                    <span
-                      className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full ${
-                        active ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {tab.count}
+                  {(tab.badge || tab.count !== undefined) && (
+                    <span className="flex items-center gap-1 shrink-0">
+                      {tab.badge && (
+                        <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                          {tab.badge}
+                        </span>
+                      )}
+                      {tab.count !== undefined && (
+                        <span
+                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                            active ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {tab.count}
+                        </span>
+                      )}
                     </span>
                   )}
                 </button>
