@@ -158,17 +158,17 @@ export const Navbar = () => {
           {/* Download PDF Resume Button */}
           <button
             onClick={() => setIsPdfModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 h-9 w-9 sm:w-auto sm:px-3.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 transition-all hover:text-white shadow-sm whitespace-nowrap"
+            className="flex items-center justify-center gap-1.5 h-9 w-9 lg:w-auto lg:px-3.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 transition-all hover:text-white shadow-sm whitespace-nowrap"
             title={isFa ? 'مشاهده و دانلود نسخه PDF رزومه' : 'View & Download Resume PDF'}
           >
             <FileDown className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">{isFa ? 'دانلود PDF رزومه' : 'PDF Resume'}</span>
+            <span className="hidden lg:inline">{isFa ? 'دانلود PDF رزومه' : 'PDF Resume'}</span>
           </button>
 
           {/* Admin Panel Button */}
           <button
             onClick={handleAdminClick}
-            className={`flex items-center justify-center gap-1.5 h-9 w-9 sm:w-auto sm:px-3.5 rounded-xl text-xs font-bold transition-all border shadow-sm whitespace-nowrap ${
+            className={`flex items-center justify-center gap-1.5 h-9 w-9 lg:w-auto lg:px-3.5 rounded-xl text-xs font-bold transition-all border shadow-sm whitespace-nowrap ${
               isAuthenticated
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
                 : 'bg-slate-800/80 text-amber-300 border-amber-500/40 hover:bg-amber-500/20'
@@ -176,7 +176,7 @@ export const Navbar = () => {
             title={isFa ? 'ورود به پنل مدیریت پیشرفته سایت' : 'Super Admin Workspace Login'}
           >
             <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="hidden sm:inline">{isFa ? 'پنل مدیریت' : 'Admin Panel'}</span>
+            <span className="hidden lg:inline">{isFa ? 'پنل مدیریت' : 'Admin Panel'}</span>
           </button>
 
           {/* Language Switcher */}
