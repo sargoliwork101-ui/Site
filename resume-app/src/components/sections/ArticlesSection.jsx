@@ -17,7 +17,7 @@ import {
 
 export const ArticlesSection = () => {
   const { data, currentTemplate, setSelectedArticle } = useData();
-  const [selectedTag, setSelectedTag] = useState('all');
+  const [selectedTag] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -49,7 +49,7 @@ export const ArticlesSection = () => {
     return null;
   }
 
-  const allTags = ['all', ...new Set(data.articles.flatMap((a) => a.tags || []))];
+
 
   const filteredArticles = data.articles.filter((art) => {
     const matchesTag = selectedTag === 'all' || (art.tags && art.tags.includes(selectedTag));
@@ -96,33 +96,9 @@ export const ArticlesSection = () => {
           </p>
         </div>
 
-        {/* Filter Tags & Search */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {allTags.slice(0, 8).map((tag) => {
-              const active = selectedTag === tag;
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setSelectedTag(tag)}
-                  title={isFa ? `فیلتر مقالات بر اساس برچسب: ${tag === 'all' ? 'همه مقالات' : tag}` : `Filter by tag: ${tag}`}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    active
-                      ? 'text-slate-950 shadow-lg scale-105'
-                      : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                  style={{
-                    backgroundColor: active ? primaryColor : undefined,
-                  }}
-                >
-                  {tag === 'all' ? (isFa ? 'همه مقالات' : 'All Papers') : tag}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="relative w-full md:w-72">
+        {/* Search */}
+        <div className="flex justify-center mb-10">
+          <div className="relative w-full md:w-96">
             <input
               type="text"
               value={searchQuery}

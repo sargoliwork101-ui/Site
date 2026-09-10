@@ -22,6 +22,7 @@ export const BoardsSection = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('date-desc'); // 'date-desc' | 'date-asc' | 'layers-desc'
   const [isExpanded, setIsExpanded] = useState(false);
+  const [catsExpanded, setCatsExpanded] = useState(false);
 
   const isFa = data?.siteConfig?.language === 'fa';
   const primaryColor = currentTemplate?.colors?.primary || '#00ffcc';
@@ -55,6 +56,18 @@ export const BoardsSection = () => {
     ];
     return list;
   }, [data?.taxonomies?.boardCategories]);
+
+  // Show only first few categories by default; rest behind a toggle
+  const visibleCats = useMemo(() => {
+    if (catsExpanded) return categories;
+    const head = categories.slice(0, 4);
+    if (!head.find((c) => c.id === selectedCategory)) {
+      const sel = categories.find((c) => c.id === selectedCategory);
+      if (sel) head.push(sel);
+    }
+    return head;
+  }, [categories, catsExpanded, selectedCategory]);
+  const hiddenCatCount = categories.length - visibleCats.length;
 
   // Sort and Filter boards chronologically
   const filteredBoards = useMemo(() => {
@@ -204,7 +217,7 @@ export const BoardsSection = () => {
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
           {/* Category Pills */}
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {categories.map((cat) => {
+            {visibleCats.map((cat) => {
               const active = selectedCategory === cat.id;
               const count = cat.id === 'all' 
                 ? (data.boards || []).length 
@@ -236,6 +249,18 @@ export const BoardsSection = () => {
                 </button>
               );
             })}
+            {categories.length > 4 && (
+              <button
+                type="button"
+                onClick={() => setCatsExpanded((v) => !v)}
+                title={isFa ? 'نمایش یا پنهان کردن بقیه دسته‌ها' : 'Show or hide remaining categories'}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border border-dashed border-slate-700 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/50"
+              >
+                {catsExpanded
+                  ? (isFa ? 'بستن ▲' : 'Less ▲')
+                  : (isFa ? `بقیه دسته‌ها (＋${formatNum(hiddenCatCount, isFa)})` : `More ＋${hiddenCatCount}`)}
+              </button>
+            )}
           </div>
 
           {/* Search Input & Sort Selector */}
