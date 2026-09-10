@@ -2,11 +2,11 @@
  * ============================================================================
  * USER MANAGEMENT & ROLE-BASED ACCESS CONTROL (RBAC) MODULE
  * ============================================================================
- * 
+ *
  * Features:
  * 1. Multi-User Accounts (Super Admin, System Admin, Editor, Author, Viewer, Custom)
  * 2. 10 Granular Permission Checkbox Matrix
- * 3. 1-Click Fast-Switch / Impersonate to test role permissions in real-time
+ * 3. Single-column expandable user rows (compact header + permission details)
  * 4. User Status (Active / Inactive) toggle
  * 5. Primary Admin Protection (prevents accidental deletion of root admin)
  *
@@ -19,7 +19,6 @@ import {
   Users,
   UserPlus,
   ShieldAlert,
-  Zap,
   Edit2,
   Trash2,
   Key,
@@ -32,6 +31,7 @@ import {
   X,
   Eye,
   EyeOff,
+  ChevronDown,
   Cpu,
   BookOpen,
   Layers,
@@ -64,7 +64,6 @@ export const UserManagementSection = () => {
     addUser,
     updateUser,
     deleteUser,
-    switchUserForTesting,
     ROLE_DEFINITIONS,
     showToast,
     showConfirmDialog
@@ -73,6 +72,9 @@ export const UserManagementSection = () => {
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+
+  // Expanded row (single-column accordion — only one open at a time)
+  const [expandedId, setExpandedId] = useState(null);
 
   // Add / Edit Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -196,11 +198,11 @@ export const UserManagementSection = () => {
   const activeCount = (users || []).filter((u) => u.status === 'active').length;
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-5">
       {/* 1. TOP STATS CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center gap-3 shadow-lg">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center font-bold shrink-0">
             <Users className="w-5 h-5" />
           </div>
           <div>
@@ -210,7 +212,7 @@ export const UserManagementSection = () => {
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center gap-3 shadow-lg">
-          <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold shrink-0">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
@@ -220,7 +222,7 @@ export const UserManagementSection = () => {
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center gap-3 shadow-lg">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold shrink-0">
             <Edit2 className="w-5 h-5" />
           </div>
           <div>
@@ -230,7 +232,7 @@ export const UserManagementSection = () => {
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center gap-3 shadow-lg">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
@@ -241,11 +243,11 @@ export const UserManagementSection = () => {
       </div>
 
       {/* 2. CONTROL BAR (SEARCH, FILTER & ADD BUTTON) */}
-      <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 shadow-xl flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+      <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 shadow-xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
           {/* Search Box */}
-          <div className="relative flex-1 sm:w-64">
-            <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 rtl:right-3 rtl:left-auto ltr:left-3 ltr:right-auto" />
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
@@ -269,153 +271,207 @@ export const UserManagementSection = () => {
             <option value="viewer">ناظر (Viewer)</option>
             <option value="custom">سفارشی (Custom)</option>
           </select>
+
+          {/* Live result count */}
+          <span className="text-[11px] text-slate-500 whitespace-nowrap sm:ms-auto lg:ms-0 px-1">
+            نمایش <b className="text-slate-200 font-mono">{filteredUsers.length}</b> از <b className="text-slate-200 font-mono">{(users || []).length}</b> کاربر
+          </span>
         </div>
 
         <button
           type="button"
           onClick={handleOpenAddModal}
-          className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 transition-all shadow-lg shrink-0"
+          className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 transition-all shadow-lg shrink-0 cursor-pointer"
         >
           <UserPlus className="w-4 h-4" />
           <span>تعریف کاربر جدید با نقش و دسترسی اختصاصی</span>
         </button>
       </div>
 
-      {/* 3. USERS CARDS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredUsers.map((u) => {
-          const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.editor;
-          const isCurrentActiveUser = currentUser && currentUser.id === u.id;
-          const isPrimaryRoot = u.username === 'admin' || u.isPrimary;
+      {/* 3. USERS LIST (single-column expandable rows) */}
+      {filteredUsers.length === 0 ? (
+        <div className="p-10 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-2">
+          <Users className="w-8 h-8 text-slate-600 mx-auto" />
+          <p className="text-sm font-bold text-slate-300">کاربری یافت نشد</p>
+          <p className="text-xs text-slate-500">جستجو یا فیلتر نقش را تغییر بده، یا یک کاربر جدید تعریف کن.</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {filteredUsers.map((u) => {
+            const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.editor;
+            const isCurrentActiveUser = currentUser && currentUser.id === u.id;
+            const isPrimaryRoot = u.username === 'admin' || u.isPrimary;
+            const grantedCount =
+              u.role === 'super_admin'
+                ? PERMISSION_CONFIGS.length
+                : PERMISSION_CONFIGS.filter((p) => u.permissions && u.permissions[p.key]).length;
+            const expanded = expandedId === u.id;
 
-          return (
-            <div
-              key={u.id}
-              className={`p-5 rounded-2xl bg-slate-950/80 border transition-all space-y-4 shadow-xl relative overflow-hidden ${
-                isCurrentActiveUser
-                  ? 'border-cyan-500/80 shadow-cyan-500/10 ring-1 ring-cyan-500/50'
-                  : 'border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              {isCurrentActiveUser && (
-                <div className="absolute top-0 left-0 bg-cyan-500 text-slate-950 text-[10px] font-bold px-3 py-0.5 rounded-br-xl font-mono">
-                  ACTIVE_SESSION (شما)
-                </div>
-              )}
-
-              {/* User Header */}
-              <div className="flex items-start justify-between gap-3 pt-1">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center text-2xl shadow-inner shrink-0">
+            return (
+              <div
+                key={u.id}
+                className={`rounded-2xl bg-slate-950/80 border transition-colors shadow-lg overflow-hidden ${
+                  isCurrentActiveUser
+                    ? 'border-cyan-500/70 ring-1 ring-cyan-500/40'
+                    : expanded
+                      ? 'border-slate-700'
+                      : 'border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                {/* Row header (click to expand) */}
+                <div
+                  onClick={() => setExpandedId(expanded ? null : u.id)}
+                  className="flex items-center gap-3 p-3 sm:p-3.5 cursor-pointer select-none flex-wrap"
+                >
+                  {/* Avatar */}
+                  <div className="w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/80 flex items-center justify-center text-xl shadow-inner shrink-0">
                     {u.avatar || roleDef.icon || '👤'}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm sm:text-base font-bold text-white">
+
+                  {/* Identity */}
+                  <div className="min-w-0 flex-1 basis-44">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-white truncate">
                         {u.nameFa || u.username}
                       </h4>
+                      {isCurrentActiveUser && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500 text-slate-950">
+                          شما
+                        </span>
+                      )}
                       {isPrimaryRoot && (
-                        <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.2 rounded-full font-bold">
+                        <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-bold">
                           ریشه سامانه
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-                      <span>@{u.username}</span>
-                      <span>•</span>
-                      <span className="text-slate-500 text-[11px] truncate max-w-[150px]">{u.email}</span>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono mt-0.5">
+                      <span className="truncate">@{u.username}</span>
+                      {u.email && (
+                        <>
+                          <span className="text-slate-600">•</span>
+                          <span className="text-slate-500 truncate max-w-[180px]">{u.email}</span>
+                        </>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Role + status badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${roleDef.badgeClass}`}>
+                      {roleDef.labelFa}
+                    </span>
+                    <span
+                      className={`text-[10px] px-2 py-1 rounded-full font-semibold whitespace-nowrap ${
+                        u.status === 'active'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/20 text-rose-300'
+                      }`}
+                    >
+                      {u.status === 'active' ? '● فعال' : '● غیرفعال'}
+                    </span>
+                  </div>
+
+                  {/* Permission summary (desktop) */}
+                  <span className="hidden lg:inline-flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/70 border border-slate-800 rounded-full px-3 py-1 whitespace-nowrap">
+                    <Key className="w-3 h-3 text-cyan-400" />
+                    <span className="font-mono font-bold text-slate-200">{grantedCount}</span>
+                    <span>از</span>
+                    <span className="font-mono">{PERMISSION_CONFIGS.length}</span>
+                    <span>دسترسی</span>
+                  </span>
+
+                  {/* Last login (wide screens) */}
+                  <span className="hidden xl:block text-[11px] text-slate-500 whitespace-nowrap">
+                    آخرین ورود: <span className="text-slate-400 font-mono">{u.lastLogin || 'ثبت نشده'}</span>
+                  </span>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 ms-auto" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(u)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
+                      title="ویرایش کاربر و تغییر دسترسی‌ها"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="hidden sm:inline">ویرایش دسترسی‌ها</span>
+                    </button>
+
+                    {!isPrimaryRoot && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          showConfirmDialog({
+                            type: 'danger',
+                            title: 'حذف کاربر؟',
+                            message: `کاربر «${u.nameFa || u.username}» برای همیشه حذف می‌شود و این عمل قابل بازگشت نیست.`,
+                            confirmText: 'بله، حذف کن',
+                            onConfirm: () => deleteUser(u.id),
+                          });
+                        }}
+                        className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
+                        title="حذف کاربر"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <span
+                      className="p-2 rounded-xl text-slate-400 border border-slate-800 bg-slate-900/60"
+                      title={expanded ? 'بستن جزئیات' : 'نمایش جزئیات دسترسی‌ها'}
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180 text-cyan-400' : ''}`} />
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1.5">
-                  <span className={`text-[11px] font-bold px-2.5 py-0.8 rounded-full border ${roleDef.badgeClass}`}>
-                    {roleDef.labelFa}
-                  </span>
-                  <span
-                    className={`text-[10px] px-2 py-0.2 rounded-full font-semibold ${
-                      u.status === 'active'
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : 'bg-rose-500/20 text-rose-300'
-                    }`}
-                  >
-                    {u.status === 'active' ? 'فعال' : 'غیرفعال'}
-                  </span>
-                </div>
+                {/* Expanded details */}
+                {expanded && (
+                  <div className="px-3 sm:px-4 pb-4 animate-fadeIn">
+                    <div className="pt-3 border-t border-slate-800 space-y-3">
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {roleDef.descriptionFa}
+                      </p>
+
+                      {/* Permissions: granted pills + muted denied ones */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {PERMISSION_CONFIGS.map((perm) => {
+                          const Icon = perm.icon;
+                          const isEnabled = u.role === 'super_admin' || (u.permissions && u.permissions[perm.key]);
+                          return (
+                            <span
+                              key={perm.key}
+                              className={`text-[11px] px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 ${
+                                isEnabled
+                                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-slate-900/60 text-slate-600 border border-slate-800'
+                              }`}
+                              title={perm.descFa}
+                            >
+                              <Icon className={`w-3.5 h-3.5 ${isEnabled ? 'text-emerald-400' : 'text-slate-700'}`} />
+                              <span>{perm.labelFa}</span>
+                              {isEnabled
+                                ? <Check className="w-3 h-3 text-emerald-400" />
+                                : <X className="w-3 h-3 text-slate-700" />}
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      {/* Meta row (last login always visible here, incl. mobile) */}
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-slate-500">
+                        <span>آخرین ورود: <span className="text-slate-400 font-mono">{u.lastLogin || 'ثبت نشده'}</span></span>
+                        {u.nameEn && <span dir="ltr" className="font-mono text-slate-500">{u.nameEn}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {/* Role Description & Permissions Summary */}
-              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2">
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  {roleDef.descriptionFa}
-                </p>
-
-                {/* Enabled Permissions Pills */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {PERMISSION_CONFIGS.map((perm) => {
-                    const isEnabled = u.role === 'super_admin' || (u.permissions && u.permissions[perm.key]);
-                    return (
-                      <span
-                        key={perm.key}
-                        className={`text-[10px] px-2 py-0.5 rounded-lg font-medium flex items-center gap-1 ${
-                          isEnabled
-                            ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30'
-                            : 'bg-slate-950/40 text-slate-600 border border-slate-800 line-through opacity-40'
-                        }`}
-                        title={perm.descFa}
-                      >
-                        {isEnabled ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <X className="w-2.5 h-2.5 text-slate-600" />}
-                        <span>{perm.labelFa}</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Footer Meta & Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-850">
-                <div className="text-[11px] text-slate-500">
-                  <span>آخرین ورود: </span>
-                  <span className="text-slate-400 font-mono">{u.lastLogin || 'ثبت نشده'}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {/* Edit Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(u)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                    title="ویرایش کاربر و تغییر دسترسی‌ها"
-                  >
-                    <Edit2 className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>ویرایش دسترسی‌ها</span>
-                  </button>
-
-                  {/* Delete Button */}
-                  {!isPrimaryRoot && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        showConfirmDialog({
-                          type: 'danger',
-                          title: 'حذف کاربر؟',
-                          message: `کاربر «${u.nameFa || u.username}» برای همیشه حذف می‌شود و این عمل قابل بازگشت نیست.`,
-                          confirmText: 'بله، حذف کن',
-                          onConfirm: () => deleteUser(u.id),
-                        });
-                      }}
-                      className="p-1.5 rounded-xl text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
-                      title="حذف کاربر"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* ADD / EDIT USER MODAL                                              */}

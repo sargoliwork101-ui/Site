@@ -1256,7 +1256,7 @@ export const AdminPanel = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-xl animate-fadeIn">
       <div
-        className="relative w-full max-w-7xl h-[94vh] rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-[1600px] h-[96vh] rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Hidden File Input for Image Uploading */}
@@ -4129,7 +4129,7 @@ export const AdminPanel = () => {
 
                         {/* 10. UNIFIED MASTER SETTINGS & SYSTEM CONFIGURATION TAB */}
             {activeTab === 'settings' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className={`space-y-6 ${settingsSubTab === 'users' ? 'max-w-none' : 'max-w-5xl'}`}>
                 {/* Master Settings Sub-navigation Bar */}
                 <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-950/90 border border-slate-800 overflow-x-auto shadow-lg">
                   {[
