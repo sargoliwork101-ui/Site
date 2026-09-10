@@ -145,6 +145,58 @@ function otp_clear($slot) {
 }
 
 // ---------------------------------------------------------------------------
+// SERVER BACKUPS (auto-backup target: api/data/backups/*.json, 0600, web-denied)
+// ---------------------------------------------------------------------------
+function backup_dir() { return DATA_DIR . '/backups'; }
+
+function backup_ensure_dir() {
+  if (!ensure_data_dir()) return false;
+  $d = backup_dir();
+  if (!is_dir($d)) { @mkdir($d, 0750, true); @chmod($d, 0750); }
+  if (!is_dir($d) || !is_writable($d)) return false;
+  // Static guards ship in the repo too; rewrite at runtime in case dotfiles
+  // get lost during upload (same pattern as ensure_data_dir()).
+  @file_put_contents($d . '/.htaccess', "<IfModule mod_authz_core.c>\n  Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n  Order Allow,Deny\n  Deny from all\n</IfModule>\n");
+  @file_put_contents($d . '/index.php', "<?php\nhttp_response_code(403);\nexit('Forbidden');\n");
+  return true;
+}
+
+/** Strict filename check — blocks path traversal (only our own names pass). */
+function backup_valid_name($name) {
+  return is_string($name) && preg_match('/^full_\d{8}_\d{6}_[a-f0-9]{8}\.json$/', $name) === 1;
+}
+
+function backup_list_files() {
+  if (!backup_ensure_dir()) return array();
+  $out = array();
+  foreach ((@scandir(backup_dir()) ?: array()) as $f) {
+    if (!backup_valid_name($f)) continue;
+    $p = backup_dir() . '/' . $f;
+    if (!is_file($p)) continue;
+    $out[] = array('name' => $f, 'bytes' => (@filesize($p) ?: 0), 'mtime' => (@filemtime($p) ?: 0));
+  }
+  usort($out, function ($a, $b) { return strcmp($b['name'], $a['name']); }); // newest first
+  return $out;
+}
+
+function backup_keep_count() {
+  $cfg = store_read('backupcfg', array());
+  $k = isset($cfg['keep']) ? (int)$cfg['keep'] : BACKUP_KEEP_DEFAULT;
+  return max(BACKUP_KEEP_MIN, min(BACKUP_KEEP_MAX, $k));
+}
+
+/** Delete oldest beyond keep-count. Returns number pruned. */
+function backup_prune($keep = null) {
+  if ($keep === null) $keep = backup_keep_count();
+  $files = backup_list_files();
+  $pruned = 0;
+  foreach (array_slice($files, $keep) as $f) {
+    if (@unlink(backup_dir() . '/' . $f['name'])) $pruned++;
+  }
+  return $pruned;
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 sec_session_start();
@@ -484,6 +536,83 @@ switch ($action) {
       . '</div></div>';
     list($sent, $err) = smtp_send($to, 'تست اتصال SMTP سایت ✅', $html, 'تست اتصال SMTP موفق بود.', null, $cfg);
     api_json(array('ok' => true, 'sent' => $sent, 'error' => $sent ? null : $err));
+    break;
+  }
+
+  // --- Server backups (auto-backup target lives on the HOST) ------------------
+  case 'backup-save': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    list($allowed, $retry) = rate_limit('backup:' . $ip, RL_BACKUP[0], RL_BACKUP[1]);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    $clen = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($clen > BACKUP_MAX_BYTES) api_fail('too_large');
+    $env = $in['backup'] ?? null;
+    if (!is_array($env) || ($env['format'] ?? '') !== 'fullsite' || !is_array($env['data'] ?? null)) {
+      api_fail('invalid_backup');
+    }
+    // Belt & braces: never persist secrets even if a client sends them.
+    if (isset($env['adminSecurity']) && is_array($env['adminSecurity'])) {
+      unset($env['adminSecurity']['password'], $env['adminSecurity']['activeOtp'], $env['adminSecurity']['otpExpiresAt']);
+    }
+    if (!backup_ensure_dir()) api_fail('save_failed', 500);
+    $json = json_encode($env, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json) || strlen($json) > BACKUP_MAX_BYTES) api_fail('too_large');
+    try { $rand = bin2hex(random_bytes(4)); } catch (Exception $e) { api_fail('save_failed', 500); }
+    $name = 'full_' . date('Ymd_His') . '_' . $rand . '.json';
+    $tmp = backup_dir() . '/' . $name . '.tmp';
+    if (@file_put_contents($tmp, $json, LOCK_EX) === false) api_fail('save_failed', 500);
+    @chmod($tmp, 0600);
+    if (!@rename($tmp, backup_dir() . '/' . $name)) { @unlink($tmp); api_fail('save_failed', 500); }
+    $pruned = backup_prune();
+    api_json(array('ok' => true, 'file' => $name, 'bytes' => strlen($json), 'pruned' => $pruned, 'kept' => backup_keep_count()));
+    break;
+  }
+
+  case 'backup-list': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    list($allowed, $retry) = rate_limit('backup:' . $ip, RL_BACKUP[0], RL_BACKUP[1]);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    api_json(array('ok' => true, 'files' => backup_list_files(), 'keep' => backup_keep_count()));
+    break;
+  }
+
+  case 'backup-get': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    list($allowed, $retry) = rate_limit('backup:' . $ip, RL_BACKUP[0], RL_BACKUP[1]);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    $name = (string)($in['name'] ?? '');
+    if (!backup_valid_name($name)) api_fail('invalid_name');
+    $p = backup_dir() . '/' . $name;
+    if (!is_file($p)) api_fail('not_found', 404);
+    $raw = @file_get_contents($p);
+    $data = is_string($raw) ? json_decode($raw, true) : null;
+    if (!is_array($data)) api_fail('corrupt', 500);
+    api_json(array('ok' => true, 'backup' => $data));
+    break;
+  }
+
+  case 'backup-delete': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    $name = (string)($in['name'] ?? '');
+    if (!backup_valid_name($name)) api_fail('invalid_name');
+    $p = backup_dir() . '/' . $name;
+    if (is_file($p)) @unlink($p);
+    api_json(array('ok' => true));
+    break;
+  }
+
+  case 'backup-config-get': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    api_json(array('ok' => true, 'keep' => backup_keep_count()));
+    break;
+  }
+
+  case 'backup-config-save': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    $keep = max(BACKUP_KEEP_MIN, min(BACKUP_KEEP_MAX, (int)($in['keep'] ?? BACKUP_KEEP_DEFAULT)));
+    if (!store_write('backupcfg', array('keep' => $keep))) api_fail('save_failed', 500);
+    $pruned = backup_prune($keep); // shrink immediately when lowered
+    api_json(array('ok' => true, 'keep' => $keep, 'pruned' => $pruned));
     break;
   }
 

@@ -147,7 +147,7 @@ Whenever you write or modify code, adhere strictly to these 21 constraints, prov
 
 - کاربر همزمان در **پنل سایت زنده** محتوا وارد می‌کند؛ این محتوادر `localStorage` مرورگر خودش ذخیره می‌شود و **هیچ ربطی به گیت ندارد** — کدنویسی ایجنت‌ها آن را پاک نمی‌کند و دیپلوی بیلد جدید هم پاکش نمی‌کند (همان origin = همان localStorage).
 - ⚠️ اما محتوای پنل فقط در مرورگر کاربر است و بازدیدکنندگان آن را نمی‌بینند. **حلقه انتشار رسمی:** کاربر از تب بک‌آپ **Export JSON** می‌گیرد → فایل را به ایجنت می‌دهد → ایجنت در `src/data/defaultData.js` مرج می‌کند (PR جدا با عنوان `content:`) → اینتگریتور دیپلوی می‌کند.
-- 💾 **فرمت بک‌آپ (مقدس!):** انولوپ فایل `format:'fullsite'` نسخه `4.0.0-FULLSITE` شامل `data` + `users` + `adminSecurity` (بدون password/OTP) + `secqa` + `autoBackup` است. اسنپ‌شات‌ها فقط `data` را نگه می‌دارند (محدودیت حجم) و بک‌آپ خودکار (`auto:true`) حداکثر ۵ تای آخری را نگه می‌دارد. `importDataJson` باید همیشه فایل‌های قدیمی (v3 و bare-data) را هم بخواند — سازگاری عقب‌رو را نشکنید.
+- 💾 **فرمت بک‌آپ (مقدس!):** انولوپ فایل `format:'fullsite'` نسخه `4.0.0-FULLSITE` شامل `data` + `users` + `adminSecurity` (بدون password/OTP) + `secqa` + `autoBackup` است. اسنپ‌شات‌ها فقط `data` را نگه می‌دارند (محدودیت حجم). بک‌آپ خودکار روی **هاست** ذخیره می‌شود (`api/data/backups/full_*.json`، اکشن‌های `backup-*` در auth.php) و فقط N تای آخر می‌ماند (پیش‌فرض ۲، قابل تنظیم ۱ تا ۱۰، ذخیره در `api/data/backupcfg.json`) — سقف ۱۲MB و rate-limit ‏`RL_BACKUP` را نشکنید. `importDataJson` باید همیشه فایل‌های قدیمی (v3 و bare-data) را هم بخواند — سازگاری عقب‌رو را نشکنید.
 - ایجنت‌ها حق ندارند کلیدهای `embedded_*` / `resume_admin_*` در localStorage را تغییرنام دهند یا فرمت ذخیره‌شده را بدون migration عوض کنند.
 
 ### 🧪 دستورهای قبل از پوش (Pre-Push Commands)

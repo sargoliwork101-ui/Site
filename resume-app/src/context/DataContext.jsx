@@ -45,7 +45,8 @@ import {
   serverChangePassword,
   serverRequestEmailChange,
   serverConfirmEmailChange,
-  serverAccount
+  serverAccount,
+  serverBackupSave
 } from '../utils/serverAuth';
 
 const DataContext = createContext(null);
@@ -2175,11 +2176,33 @@ export const DataProvider = ({ children }) => {
           setAutoBackupStatus({ pending: false, nextAt: 0 });
           return; // nothing new since the last auto backup — skip silently
         }
-        createSnapshot('', { auto: true, silent: true });
-        lastSigRef.current = cur;
-        setAutoBackup((prev) => ({ ...prev, lastRun: Date.now(), lastSig: cur, deadline: 0 }));
-        setAutoBackupStatus({ pending: false, nextAt: 0 });
-        showToast('🤖 بک‌آپ خودکار ثبت شد.');
+        // Server-first: the durable copy lives on the HOST (retention enforced
+        // there). A local snapshot is only the fallback (no backend / expired
+        // session / oversize envelope) — data is protected either way.
+        const envelope = buildFullBackup();
+        const pushToHost = async () => {
+          if (!backend.available || !backend.authenticated) return { ok: false, error: 'no_backend' };
+          try {
+            return await serverBackupSave(envelope);
+          } catch {
+            return { ok: false, error: 'network' };
+          }
+        };
+        pushToHost().then((r) => {
+          lastSigRef.current = cur;
+          setAutoBackup((prev) => ({ ...prev, lastRun: Date.now(), lastSig: cur, deadline: 0 }));
+          setAutoBackupStatus({ pending: false, nextAt: 0 });
+          if (r && r.ok) {
+            showToast('🤖 بک‌آپ خودکار روی هاست ذخیره شد.');
+          } else {
+            createSnapshot('', { auto: true, silent: true });
+            const err = (r && r.error) || 'failed';
+            if (err === 'too_large') showToast('بک‌آپ خودکار حجیم بود؛ نسخه محلی ثبت شد — فایل را دستی دانلود کنید.', 'warning');
+            else if (err === 'auth_required') showToast('نشست سرور منقضی شده؛ نسخه محلی ثبت شد — دوباره وارد شوید.', 'warning');
+            else showToast('هاست در دسترس نبود؛ نسخه محلی ثبت شد.', 'warning');
+          }
+        });
+        return;
       }, wait);
     };
     arm(target);
@@ -2539,6 +2562,7 @@ export const DataProvider = ({ children }) => {
         autoBackupStatus,
         setAutoBackupConfig,
         getStorageUsage,
+        buildFullBackup,
         exportDataJson,
         copyBackupToClipboard,
         importDataJson,

@@ -6,6 +6,13 @@ import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
 import { validateUploadFile, sanitizeSvgDataUrl } from '../../utils/security';
 import { serverSmtpGet, serverSmtpSave, serverSmtpReveal, serverSmtpTest } from '../../utils/serverAuth';
+import {
+  serverBackupSave,
+  serverBackupList,
+  serverBackupGet,
+  serverBackupDelete,
+  serverBackupConfigSave,
+} from '../../utils/serverAuth';
 import { TEMPLATES } from '../../data/templates';
 import {
   LayoutDashboard,
@@ -159,6 +166,7 @@ export const AdminPanel = () => {
     autoBackupStatus,
     setAutoBackupConfig,
     getStorageUsage,
+    buildFullBackup,
     exportDataJson,
     copyBackupToClipboard,
     importDataJson,
@@ -212,16 +220,154 @@ export const AdminPanel = () => {
   // Backup-center local UI: storage meter + auto-backup countdown ticker
   const [storageUsage, setStorageUsage] = useState(null);
   const [backupTick, setBackupTick] = useState(0);
+  // Server-side backups (the auto-backup target lives on the HOST)
+  const [serverBackups, setServerBackups] = useState([]);
+  const [serverKeep, setServerKeep] = useState(2);
+  const [serverLoading, setServerLoading] = useState(false);
+  const [serverBusy, setServerBusy] = useState('');
 
   useEffect(() => {
     if (settingsSubTab !== 'backup') return;
     try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
+    refreshServerBackups();
     const t = setInterval(() => {
       setBackupTick((x) => x + 1);
       try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
     }, 30000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsSubTab]);
+
+  const refreshServerBackups = async () => {
+    if (!backend?.available) {
+      setServerBackups([]);
+      return;
+    }
+    setServerLoading(true);
+    try {
+      const r = await serverBackupList();
+      if (r?.ok) {
+        setServerBackups(Array.isArray(r.files) ? r.files : []);
+        if (r.keep) setServerKeep(r.keep);
+      }
+    } finally {
+      setServerLoading(false);
+    }
+  };
+
+  const handleServerBackupNow = async () => {
+    if (serverBusy || !backend?.available) return;
+    setServerBusy('save');
+    try {
+      const r = await serverBackupSave(buildFullBackup());
+      if (r?.ok) {
+        showToast(`بک‌آپ کامل روی هاست ذخیره شد (${serverKeep} تای آخر نگه داشته می‌شود).`);
+        refreshServerBackups();
+      } else if (r?.error === 'auth_required') {
+        showToast('نشست سرور منقضی شده — دوباره وارد شوید.', 'error');
+      } else if (r?.error === 'too_large') {
+        showToast('بک‌آپ از سقف ۱۲ مگابایت بیشتر است — فایل را دستی دانلود کنید.', 'error');
+      } else if (r?.error === 'rate_limit') {
+        showToast('تعداد درخواست زیاد شد — کمی بعد تلاش کنید.', 'error');
+      } else {
+        showToast('ذخیره بک‌آپ روی هاست ناموفق بود.', 'error');
+      }
+    } finally {
+      setServerBusy('');
+    }
+  };
+
+  const handleServerKeepSave = async () => {
+    if (serverBusy || !backend?.available) return;
+    const keep = Math.max(1, Math.min(10, parseInt(serverKeep, 10) || 2));
+    setServerKeep(keep);
+    setServerBusy('keep');
+    try {
+      const r = await serverBackupConfigSave(keep);
+      if (r?.ok) {
+        showToast(`از این به بعد ${keep} بک‌آپ آخر روی هاست نگه داشته می‌شود.`);
+        refreshServerBackups();
+      } else {
+        showToast('ذخیره تعداد بک‌آپ ناموفق بود.', 'error');
+      }
+    } finally {
+      setServerBusy('');
+    }
+  };
+
+  const handleServerBackupRestore = async (name) => {
+    if (serverBusy || !backend?.available) return;
+    setServerBusy(`get:${name}`);
+    try {
+      const r = await serverBackupGet(name);
+      if (r?.ok && r.backup) {
+        importDataJson(r.backup, {
+          onSuccess: () => {
+            setSkillsList(data.skills || []);
+            refreshServerBackups();
+          },
+        });
+      } else {
+        showToast('خواندن بک‌آپ از هاست ناموفق بود.', 'error');
+      }
+    } finally {
+      setServerBusy('');
+    }
+  };
+
+  const handleServerBackupDownload = async (name) => {
+    if (serverBusy || !backend?.available) return;
+    setServerBusy(`dl:${name}`);
+    try {
+      const r = await serverBackupGet(name);
+      if (r?.ok && r.backup) {
+        const blob = new Blob([JSON.stringify(r.backup, null, 2)], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast('فایل بک‌آپ هاست دانلود شد.');
+      } else {
+        showToast('دانلود بک‌آپ از هاست ناموفق بود.', 'error');
+      }
+    } finally {
+      setServerBusy('');
+    }
+  };
+
+  const handleServerBackupDelete = (name) => {
+    if (serverBusy || !backend?.available) return;
+    showConfirmDialog({
+      type: 'danger',
+      title: 'حذف بک‌آپ هاست؟',
+      message: `فایل «${name}» از روی هاست حذف می‌شود و قابل بازگشت نیست.`,
+      confirmText: 'بله، حذف کن',
+      onConfirm: async () => {
+        setServerBusy(`del:${name}`);
+        try {
+          const r = await serverBackupDelete(name);
+          if (r?.ok) {
+            showToast('بک‌آپ از روی هاست حذف شد.');
+            refreshServerBackups();
+          } else {
+            showToast('حذف بک‌آپ ناموفق بود.', 'error');
+          }
+        } finally {
+          setServerBusy('');
+        }
+      },
+    });
+  };
+
+  const faFileSize = (bytes) => {
+    const b = bytes || 0;
+    if (b < 1024) return `${b} B`;
+    if (b < 1048576) return `${(b / 1024).toFixed(0)} KB`;
+    return `${(b / 1048576).toFixed(1)} MB`;
+  };
 
   // Skills Editing Local State
   const [skillsList, setSkillsList] = useState(data.skills || []);
@@ -4783,7 +4929,7 @@ export const AdminPanel = () => {
                       </div>
 
                       <p className="text-xs text-slate-400 leading-relaxed">
-                        هر تغییری در هر قسمت سایت بدهی، تایمر از اول شروع می‌شود؛ اگر تا پایان زمان تنظیمی تغییر جدیدی نیاید، فقط یک نسخه خودکار (🤖) در جدول پایین ثبت می‌شود — نه بیشتر. فقط ۵ نسخه خودکار آخر نگه داشته می‌شود و نسخه‌های دستی تو هیچ‌وقت حذف نمی‌شوند.
+                        هر تغییری در هر قسمت سایت بدهی، تایمر از اول شروع می‌شود؛ اگر تا پایان زمان تنظیمی تغییر جدیدی نیاید، فقط یک بک‌آپ خودکار (🤖) روی هاست ذخیره می‌شود — نه بیشتر. (در حالت محلی بدون PHP، نسخه مرورگر ثبت می‌شود.) تعداد بک‌آپ‌های هاست را از کارت پایین تعیین می‌کنی؛ نسخه‌های دستی تو هیچ‌وقت حذف نمی‌شوند.
                       </p>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -4838,7 +4984,7 @@ export const AdminPanel = () => {
                                   : 'در انتظار تغییر جدید'}
                             </b>
                           </div>
-                          <p className="text-[11px] text-slate-500">تایمر با ساعت واقعی جلو می‌رود؛ اگر موعدش وقتی برسد که پنل بسته است، حدود یک دقیقه بعد از باز شدن پنل همان یک نسخه ثبت می‌شود.</p>
+                          <p className="text-[11px] text-slate-500">تایمر با ساعت واقعی جلو می‌رود؛ اگر موعدش وقتی برسد که پنل بسته است، حدود یک دقیقه بعد از باز شدن پنل همان یک بک‌آپ روی هاست ثبت می‌شود.</p>
                         </div>
                       </div>
 
@@ -4872,19 +5018,146 @@ export const AdminPanel = () => {
                         <h6 className="text-xs font-bold text-cyan-300">📍 بک‌آپ‌ها دقیقاً کجا ذخیره می‌شوند؟</h6>
                         <ul className="text-[11px] text-slate-300 leading-relaxed space-y-1.5 list-disc list-inside">
                           <li>
-                            <b className="text-white">نسخه‌های جدول پایین (دستی + خودکار):</b> داخل حافظه داخلی همین مرورگر و همین دستگاه (localStorage) با کلید <code dir="ltr" className="text-cyan-300 font-mono">embedded_portfolio_snapshots_v2</code> — برای دیدنش در کروم/اج کلید <code dir="ltr" className="text-cyan-300 font-mono">F12</code> را بزن، تب <code dir="ltr" className="text-cyan-300 font-mono">Application</code> ← بخش <code dir="ltr" className="text-cyan-300 font-mono">Local Storage</code> ← آدرس سایت.
+                            <b className="text-white">🤖 بک‌آپ خودکار:</b> روی خود هاست، پوشه <code dir="ltr" className="text-cyan-300 font-mono">api/data/backups/</code> — فهرست و بازگردانیش در کارت «بک‌آپ‌های روی هاست» پایین همین صفحه است.
                           </li>
                           <li>
-                            <b className="text-white">فایل بک‌آپ کامل (.json):</b> هرجا که خودت دانلودش می‌کنی (معمولاً پوشه Downloads) — این تنها نسخه‌ای است که بیرون از مرورگر است و با پاک شدن دیتای مرورگر از بین نمی‌رود.
+                            <b className="text-white">📸 نسخه‌های دستی جدول پایین:</b> داخل حافظه داخلی همین مرورگر و همین دستگاه (localStorage) با کلید <code dir="ltr" className="text-cyan-300 font-mono">embedded_portfolio_snapshots_v2</code> — برای دیدنش در کروم/اج کلید <code dir="ltr" className="text-cyan-300 font-mono">F12</code> را بزن، تب <code dir="ltr" className="text-cyan-300 font-mono">Application</code> ← بخش <code dir="ltr" className="text-cyan-300 font-mono">Local Storage</code> ← آدرس سایت.
                           </li>
                           <li>
-                            <b className="text-white">رمزها و صندوق SMTP:</b> روی خود هاست (پوشه <code dir="ltr" className="text-cyan-300 font-mono">api/data</code>) — با بک‌آپ مرورگر کاری ندارند.
+                            <b className="text-white">📥 فایل بک‌آپ کامل (.json):</b> هرجا که خودت دانلودش می‌کنی (معمولاً پوشه Downloads) — بیرون از مرورگر است و با پاک شدن دیتای مرورگر از بین نمی‌رود.
+                          </li>
+                          <li>
+                            <b className="text-white">🔐 رمزها و صندوق SMTP:</b> روی خود هاست (پوشه <code dir="ltr" className="text-cyan-300 font-mono">api/data</code>) — هیچ‌وقت داخل هیچ بک‌آپی نمی‌روند.
                           </li>
                         </ul>
                         <p className="text-[11px] text-amber-300 leading-relaxed">
-                          ⚠️ پاک کردن دیتای مرورگر (Clear browsing data) نسخه‌های جدول را پاک می‌کند — برای همین همیشه یک فایل بک‌آپ تازه جای امن داشته باش.
+                          ⚠️ پاک کردن دیتای مرورگر (Clear browsing data) نسخه‌های دستی جدول را پاک می‌کند، ولی بک‌آپ‌های هاست امن‌اند — برای همین همیشه یک فایل بک‌آپ تازه هم جای امن داشته باش.
                         </p>
                       </div>
+                    </div>
+
+                    {/* 4. SERVER BACKUPS (auto-backup target lives on the HOST) */}
+                    <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                          <Server className="w-4 h-4 text-emerald-400" />
+                          <span>بک‌آپ‌های روی هاست (مقصد بک‌آپ خودکار)</span>
+                        </h5>
+                        <button
+                          type="button"
+                          onClick={refreshServerBackups}
+                          disabled={serverLoading || !backend?.available}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 disabled:opacity-50 cursor-pointer"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${serverLoading ? 'animate-spin' : ''}`} />
+                          <span>به‌روزرسانی فهرست</span>
+                        </button>
+                      </div>
+
+                      {!backend?.available ? (
+                        <p className="text-xs text-sky-300 leading-relaxed">
+                          🖥️ حالت محلی است — بک‌آپ خودکار نسخه مرورگر ثبت می‌کند. روی هاست واقعی (PHP) نسخه‌ها اینجا روی سرور ذخیره می‌شوند.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                              <label className="block text-xs font-bold text-white mb-1.5">
+                                چند بک‌آپ آخر روی هاست بماند؟ (۱ تا ۱۰)
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={10}
+                                  dir="ltr"
+                                  value={serverKeep}
+                                  onChange={(e) => setServerKeep(e.target.value)}
+                                  className="w-24 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleServerKeepSave}
+                                  disabled={!!serverBusy}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+                                >
+                                  {serverBusy === 'keep' ? '⏳...' : 'ذخیره تعداد'}
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-1.5">قدیمی‌ترها خودکار حذف می‌شوند. هر بک‌آپ ممکن است چند مگابایت باشد.</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-center gap-2">
+                              <p className="text-xs text-slate-400 leading-relaxed">
+                                بدون انتظار برای تایمر، همین حالا یک بک‌آپ کامل روی هاست بگیر:
+                              </p>
+                              <button
+                                type="button"
+                                onClick={handleServerBackupNow}
+                                disabled={!!serverBusy}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <Upload className="w-4 h-4" />
+                                <span>{serverBusy === 'save' ? '⏳ در حال آپلود...' : '⏫ بک‌آپ فوری روی هاست'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            {serverLoading && serverBackups.length === 0 && (
+                              <p className="text-xs text-slate-500">⏳ در حال خواندن فهرست هاست...</p>
+                            )}
+                            {!serverLoading && serverBackups.length === 0 && (
+                              <p className="text-xs text-slate-500">هنوز بک‌آپی روی هاست نیست — با دکمه بالا اولین را بگیر.</p>
+                            )}
+                            {serverBackups.map((f) => (
+                              <div
+                                key={f.name}
+                                className="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <Server className="w-4 h-4 text-emerald-400" />
+                                  <div>
+                                    <div dir="ltr" className="text-[11px] font-mono text-white">{f.name}</div>
+                                    <div className="text-[11px] text-slate-400 mt-0.5">
+                                      {f.mtime ? new Date(f.mtime * 1000).toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                      {' · '}{faFileSize(f.bytes)}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleServerBackupRestore(f.name)}
+                                    disabled={!!serverBusy}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span>{serverBusy === `get:${f.name}` ? '⏳...' : 'بازگردانی'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleServerBackupDownload(f.name)}
+                                    disabled={!!serverBusy}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <Download className="w-3.5 h-3.5 text-cyan-400" />
+                                    <span>{serverBusy === `dl:${f.name}` ? '⏳...' : 'دانلود'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleServerBackupDelete(f.name)}
+                                    disabled={!!serverBusy}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-xs disabled:opacity-30 cursor-pointer"
+                                    title="حذف از هاست"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Snapshots Table */}

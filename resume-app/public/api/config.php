@@ -37,6 +37,11 @@ define('RL_LOGIN', [5, 300]);
 define('RL_OTP_REQUEST', [3, 600]);
 define('RL_OTP_VERIFY', [10, 600]);
 define('RL_CONTACT', [5, 3600]);
+define('RL_BACKUP', [10, 3600]);      // server backup save/list/get/delete/config
+define('BACKUP_MAX_BYTES', 12582912); // 12MB envelope cap (base64 images included)
+define('BACKUP_KEEP_MIN', 1);
+define('BACKUP_KEEP_MAX', 10);
+define('BACKUP_KEEP_DEFAULT', 2);
 
 // --- Session timeouts ---
 define('SESSION_IDLE_TIMEOUT', 7200);  // 2 hours idle

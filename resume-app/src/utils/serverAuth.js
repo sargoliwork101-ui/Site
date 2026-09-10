@@ -171,6 +171,25 @@ export const serverSmtpReveal = () =>
 export const serverSmtpTest = () =>
   postForm(AUTH_URL, 'smtp-test', {});
 
+// --- Server backups (auto-backup target lives on the HOST) --------------------
+export const serverBackupSave = (backup) =>
+  postForm(AUTH_URL, 'backup-save', { backup });
+
+export const serverBackupList = () =>
+  postForm(AUTH_URL, 'backup-list', {});
+
+export const serverBackupGet = (name) =>
+  postForm(AUTH_URL, 'backup-get', { name });
+
+export const serverBackupDelete = (name) =>
+  postForm(AUTH_URL, 'backup-delete', { name });
+
+export const serverBackupConfigGet = () =>
+  postForm(AUTH_URL, 'backup-config-get', {});
+
+export const serverBackupConfigSave = (keep) =>
+  postForm(AUTH_URL, 'backup-config-save', { keep });
+
 // --- Contact ------------------------------------------------------------------
 export const serverContact = (payload) =>
   postContact(payload);
