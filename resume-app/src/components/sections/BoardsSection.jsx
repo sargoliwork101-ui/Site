@@ -150,7 +150,7 @@ export const BoardsSection = () => {
           >
             <Cpu className="w-3.5 h-3.5 text-cyan-400" />
             <span>{isFa ? 'تمام پروژه‌ها' : 'All Projects'}</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-slate-950/40 text-slate-300">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono bg-slate-950/40 text-slate-300">
               {formatNum((data.boards || []).length, isFa)}
             </span>
           </button>
@@ -167,7 +167,7 @@ export const BoardsSection = () => {
           >
             <Building2 className="w-3.5 h-3.5 text-cyan-400" />
             <span>{isFa ? '🏢 پروژه‌های شرکتی و صنعتی' : 'Corporate & Industrial'}</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-cyan-950/60 text-cyan-300">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono bg-cyan-950/60 text-cyan-300">
               {formatNum((data.boards || []).filter(b => !b.isPersonalProject && b.companyId !== 'personal').length, isFa)}
             </span>
           </button>
@@ -184,7 +184,7 @@ export const BoardsSection = () => {
           >
             <User className="w-3.5 h-3.5 text-amber-400" />
             <span>{isFa ? '🔬 آزمایشگاه شخصی و R&D مستقل' : 'Personal R&D Lab'}</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-amber-950/60 text-amber-300">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono bg-amber-950/60 text-amber-300">
               {formatNum((data.boards || []).filter(b => b.isPersonalProject || b.companyId === 'personal').length, isFa)}
             </span>
           </button>

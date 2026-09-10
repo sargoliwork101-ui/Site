@@ -99,7 +99,7 @@ export const SkillsSection = () => {
                   <Icon className="w-4 h-4" />
                   <span>{isFa ? group.categoryFa : (group.categoryEn || group.categoryFa)}</span>
                   <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                       active ? 'bg-slate-950/20 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
                     }`}
                   >

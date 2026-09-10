@@ -1122,7 +1122,8 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
   // 11. DYNAMIC TAXONOMIES (CATEGORIES, STATUSES, EDA TOOLS - WITH CASCADING SYNC)
   // --------------------------------------------------------------------------
-  const updateTaxonomyOption = (taxonomyType, oldId, updatedOption) => {
+  const updateTaxonomyOption = (taxonomyType, oldIdOrOption, updatedOption) => {
+    const oldId = typeof oldIdOrOption === 'object' ? oldIdOrOption?.id : oldIdOrOption;
     setData((prev) => {
       const currentTaxonomies = prev.taxonomies || {};
       const list = currentTaxonomies[taxonomyType] || [];
@@ -1155,10 +1156,10 @@ export const DataProvider = ({ children }) => {
         const oldItem = list.find((i) => i.id === oldId);
         if (oldItem) {
           updatedArticles = prev.articles.map((a) => {
-            if (a.category === oldId || a.categoryFa === oldItem.labelFa || a.categoryEn === oldItem.labelEn) {
+            if (a.category === oldId || a.category === oldItem.labelFa || a.categoryFa === oldItem.labelFa || a.categoryEn === oldItem.labelEn) {
               return {
                 ...a,
-                category: updatedOption.id || oldId,
+                category: updatedOption.labelFa,
                 categoryFa: updatedOption.labelFa,
                 categoryEn: updatedOption.labelEn,
               };
@@ -1172,10 +1173,10 @@ export const DataProvider = ({ children }) => {
         const oldItem = list.find((i) => i.id === oldId);
         if (oldItem) {
           updatedBoards = prev.boards.map((b) => {
-            if (b.status === oldId || b.statusFa === oldItem.labelFa || b.statusEn === oldItem.labelEn) {
+            if (b.status === oldId || b.status === oldItem.labelFa || b.status === oldItem.labelEn || b.statusFa === oldItem.labelFa) {
               return {
                 ...b,
-                status: updatedOption.id || oldId,
+                status: updatedOption.labelFa,
                 statusFa: updatedOption.labelFa,
                 statusEn: updatedOption.labelEn,
               };
@@ -1189,10 +1190,12 @@ export const DataProvider = ({ children }) => {
         const oldItem = list.find((i) => i.id === oldId);
         if (oldItem) {
           updatedBoards = prev.boards.map((b) => {
-            if (b.edaTool === oldItem.labelEn || b.edaTool === oldItem.labelFa) {
+            if (b.edaTool === oldItem.labelEn || b.edaTool === oldItem.labelFa || b.edaToolFa === oldItem.labelFa || b.edaToolEn === oldItem.labelEn) {
               return {
                 ...b,
-                edaTool: updatedOption.labelEn || updatedOption.labelFa,
+                edaTool: updatedOption.labelFa || updatedOption.labelEn,
+                edaToolFa: updatedOption.labelFa,
+                edaToolEn: updatedOption.labelEn,
               };
             }
             return b;

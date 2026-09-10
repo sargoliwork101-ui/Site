@@ -94,7 +94,7 @@ export const ExperienceSection = () => {
               <Briefcase className="w-4 h-4" />
               <span>{isFa ? 'درخت سوابق شغلی (LinkedIn Tree)' : 'Work Experience (Tree)'}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'experience' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
                 }`}
               >
@@ -118,7 +118,7 @@ export const ExperienceSection = () => {
               <GraduationCap className="w-4 h-4" />
               <span>{isFa ? 'مدارک و سوابق تحصیلی' : 'Education & Academic Degrees'}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'education' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
                 }`}
               >
@@ -142,7 +142,7 @@ export const ExperienceSection = () => {
               <Award className="w-4 h-4" />
               <span>{isFa ? 'گواهینامه‌های بین‌المللی' : 'Certifications & Credentials'}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'certifications' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
                 }`}
               >

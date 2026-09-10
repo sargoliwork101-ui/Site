@@ -972,6 +972,9 @@ export const AdminPanel = () => {
     const shortDescEn = formData.get('shortDescEn') || autoTranslateFaToEn(shortDescFa);
     const categoryFa = formData.get('categoryFa') || 'اینترنت اشیا و صنعتی';
     const categoryEn = formData.get('categoryEn') || autoTranslateFaToEn(categoryFa);
+    const categoryId = data.taxonomies?.boardCategories?.find((c) => c.labelFa === categoryFa)?.id
+      || data.taxonomies?.boardCategories?.find((c) => c.labelEn === categoryEn)?.id
+      || boardForm?.category || 'iot-industrial';
     const statusFa = formData.get('statusFa') || 'تولید انبوه صنعتی';
     const statusEn = formData.get('statusEn') || autoTranslateFaToEn(statusFa);
     const powerSupplyFa = formData.get('powerSupplyFa') || 'ورودی ۹ الی ۳۶ ولت DC ایزوله';
@@ -992,16 +995,38 @@ export const AdminPanel = () => {
     // Read featured state directly from the checkbox (checked = on/true, unchecked = null/false)
     const isFeatured = formData.get('featured') === 'on' || formData.get('featured') === 'true';
 
+    const mcuFa = formData.get('mcuFa') || boardForm?.mcuFa || '';
+    const mcuEn = formData.get('mcuEn') || boardForm?.mcuEn || '';
+    const edaToolFa = formData.get('edaToolFa') || boardForm?.edaToolFa || '';
+    const edaToolEn = formData.get('edaToolEn') || boardForm?.edaToolEn || '';
+    const dimensionsFa = formData.get('dimensionsFa') || boardForm?.dimensionsFa || '';
+    const dimensionsEn = formData.get('dimensionsEn') || boardForm?.dimensionsEn || '';
+    const layersFa = formData.get('layersFa') || boardForm?.layersFa || '';
+    const layersEn = formData.get('layersEn') || boardForm?.layersEn || '';
+    const rawIfFa = formData.get('interfacesFa');
+    const rawIfEn = formData.get('interfacesEn');
+    const parseIfaces = (v) => (v || '').split(',').map((st) => st.trim()).filter(Boolean);
+    const interfacesFa = rawIfFa !== null ? parseIfaces(rawIfFa) : (boardForm?.interfacesFa || boardForm?.interfaces || []);
+    const interfacesEn = rawIfEn !== null ? parseIfaces(rawIfEn) : (boardForm?.interfacesEn || boardForm?.interfaces || []);
+
     const boardData = {
       titleFa,
       titleEn,
-      category: formData.get('category') || 'iot-industrial',
+      category: categoryId,
       categoryFa,
       categoryEn,
       layers: parseInt(formData.get('layers') || '4'),
-      mcu: formData.get('mcu'),
-      edaTool: formData.get('edaTool'),
-      dimensions: formData.get('dimensions'),
+      layersFa,
+      layersEn,
+      mcu: mcuFa || mcuEn || boardForm?.mcu || '',
+      mcuFa,
+      mcuEn,
+      edaTool: edaToolFa || edaToolEn || boardForm?.edaTool || '',
+      edaToolFa,
+      edaToolEn,
+      dimensions: dimensionsFa || dimensionsEn || boardForm?.dimensions || '',
+      dimensionsFa,
+      dimensionsEn,
       powerSupply: powerSupplyFa,
       powerSupplyEn: powerSupplyEn,
       status: statusFa,
@@ -1017,7 +1042,9 @@ export const AdminPanel = () => {
       companyId,
       companyFa,
       companyEn,
-      interfaces: (formData.get('interfaces') || '').split(',').map((s) => s.trim()).filter(Boolean),
+      interfaces: interfacesFa.length > 0 ? interfacesFa : interfacesEn,
+      interfacesFa,
+      interfacesEn,
       features: featuresFa,
       featuresEn: featuresEn.length > 0 ? featuresEn : featuresFa.map((f) => autoTranslateFaToEn(f)),
       githubUrl: formData.get('githubUrl'),
@@ -1194,6 +1221,7 @@ export const AdminPanel = () => {
     const locationFa = formData.get('locationFa');
     const locationEn = formData.get('locationEn') || 'Tehran, Iran';
 
+    const sortYear = parseInt(formData.get('sortYear'), 10) || expForm?.sortYear || null;
     const achievementsFa = (formData.get('achievementsFa') || '').split('\n').map((s) => s.trim()).filter(Boolean);
     const achievementsEn = (formData.get('achievementsEn') || '')
       .split('\n')
@@ -1213,6 +1241,18 @@ export const AdminPanel = () => {
       achievementsFa,
       achievementsEn: achievementsEn.length > 0 ? achievementsEn : achievementsFa.map((a) => autoTranslateFaToEn(a)),
       skillsUsed: (formData.get('skillsUsed') || '').split(',').map((s) => s.trim()).filter(Boolean),
+      durationFa: formData.get('durationFa') || expForm?.durationFa || '',
+      durationEn: formData.get('durationEn') || expForm?.durationEn || '',
+      sortYear,
+      sortDate: expForm?.sortDate || (sortYear ? `${sortYear}-01-01` : new Date().toISOString().split('T')[0]),
+      isCurrent: formData.get('isCurrent') !== null,
+      companyLogo: expForm?.companyLogo || '',
+      companyInitials: expForm?.companyInitials || '',
+      companyColor: expForm?.companyColor || '',
+      startDateFa: expForm?.startDateFa || '',
+      startDateEn: expForm?.startDateEn || '',
+      endDateFa: expForm?.endDateFa || '',
+      endDateEn: expForm?.endDateEn || '',
     };
 
     let updatedExp;
@@ -2692,7 +2732,7 @@ export const AdminPanel = () => {
                                   {b.layers} Layers
                                 </span>
                                 {b.datasheetUrl && (
-                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                                     PDF DATASHEET
                                   </span>
                                 )}
@@ -4185,7 +4225,7 @@ export const AdminPanel = () => {
                         onClick={() => setSettingsSubTab(sub.id)}
                         className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                           active
-                            ? 'bg-cyan-500 text-slate-950 shadow-md font-black scale-102'
+                            ? 'bg-cyan-500 text-slate-950 shadow-md font-black scale-105'
                             : 'text-slate-400 hover:text-white hover:bg-slate-900'
                         }`}
                       >
@@ -4467,7 +4507,7 @@ export const AdminPanel = () => {
                                 onClick={() => handleSelectFaviconPreset(preset.svg)}
                                 className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all text-center ${
                                   isSelected
-                                    ? 'bg-cyan-500/20 border-cyan-400 ring-2 ring-cyan-400/50 scale-102'
+                                    ? 'bg-cyan-500/20 border-cyan-400 ring-2 ring-cyan-400/50 scale-105'
                                     : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-400 hover:border-slate-700'
                                 }`}
                               >
@@ -4753,6 +4793,26 @@ export const AdminPanel = () => {
                           name="author"
                           defaultValue={seo.author}
                           className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">نویسنده (انگلیسی):</label>
+                        <input
+                          name="authorEn"
+                          defaultValue={seo.authorEn}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">هندل توییتر / ایکس:</label>
+                        <input
+                          name="twitterHandle"
+                          defaultValue={seo.twitterHandle}
+                          placeholder="@username"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                         />
                       </div>
                     </div>

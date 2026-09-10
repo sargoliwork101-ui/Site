@@ -139,7 +139,7 @@ export const TemplatePickerModal = () => {
                 >
                   <span>{cat.labelFa}</span>
                   <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                       active ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
                     }`}
                   >
@@ -244,7 +244,7 @@ export const TemplatePickerModal = () => {
                         />
                       </div>
                       <span
-                        className="text-[9px] font-mono px-1.5 py-0.2 rounded"
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded"
                         style={{
                           backgroundColor: `${tpl.colors.primary}25`,
                           color: tpl.colors.primary,

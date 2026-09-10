@@ -324,7 +324,7 @@ export const Interactive3DViewer = ({ board, isFa }) => {
           <div>
             <span className="font-bold text-white flex items-center gap-1.5">
               <span>{isFa ? 'نمایشگر سه‌بعدی تعاملی برد و لایه‌ها' : 'Interactive 3D PCB Viewer'}</span>
-              <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 3D CAD (View-Only)
               </span>
             </span>
