@@ -32,7 +32,8 @@ import {
   verifyPasswordLocal,
   isLocalPasswordHash,
   hasWebCrypto,
-  copyTextToClipboard
+  copyTextToClipboard,
+  needsLocalRehash
 } from '../utils/security';
 import {
   fetchServerStatus,
@@ -1560,8 +1561,9 @@ export const DataProvider = ({ children }) => {
       return { success: false, error: 'invalid_credentials' };
     }
 
-    // Migrate legacy plaintext → hash on successful login
-    if (!isLocalPasswordHash(targetUser.password)) {
+    // Upgrade stored credential on successful login (plaintext → hash,
+    // fallback → PBKDF2, or old iterations → current count)
+    if (needsLocalRehash(targetUser.password)) {
       try {
         const h = await hashPasswordLocal(inputPassword);
         setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? { ...u, password: h } : u)));
@@ -2004,8 +2006,8 @@ export const DataProvider = ({ children }) => {
     return true;
   };
 
-  const skipServerSetupVerify = async () => {
-    const r = await serverSkipSetupVerify();
+  const skipServerSetupVerify = async (setupPassword) => {
+    const r = await serverSkipSetupVerify(setupPassword);
     if (!r.ok) {
       showToast('خطا. دوباره تلاش کنید.', 'error');
       return false;

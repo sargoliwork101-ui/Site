@@ -20,7 +20,10 @@ define('DATA_DIR', API_DIR . '/data');
 
 // --- Password policy ---
 define('MIN_PASSWORD_LEN', 8);
-define('MAX_PASSWORD_LEN', 128);
+// 72 = bcrypt's hard limit (bytes beyond it are silently IGNORED by the
+// algorithm). Capped here so a 100-char password can never verify as its
+// 72-char prefix. Applies uniformly even where Argon2 is available.
+define('MAX_PASSWORD_LEN', 72);
 
 // --- OTP policy ---
 define('OTP_LEN', 6);
@@ -91,6 +94,7 @@ function api_require_post() {
 function api_input() {
   $raw = file_get_contents('php://input');
   if (!is_string($raw) || $raw === '') return array();
+  if (strlen($raw) > 16777216) api_fail('too_large', 413); // 16MB hard cap
   $data = json_decode($raw, true);
   return is_array($data) ? $data : array();
 }

@@ -57,6 +57,14 @@ function sec_session_start() {
   }
   $_SESSION['last'] = $now;
   if (!isset($_SESSION['created'])) { $_SESSION['created'] = $now; }
+  // Rotate the session ID every 30 min while authenticated (anti-fixation).
+  if (!empty($_SESSION['auth']) && $_SESSION['auth'] === true) {
+    $regen = (int)($_SESSION['regen'] ?? 0);
+    if (($now - $regen) > 1800) {
+      if (session_status() === PHP_SESSION_ACTIVE) { @session_regenerate_id(true); }
+      $_SESSION['regen'] = $now;
+    }
+  }
 }
 
 function sec_is_authed() {
@@ -75,7 +83,17 @@ function sec_logout() {
   $_SESSION = array();
   if (session_status() === PHP_SESSION_ACTIVE) { @session_destroy(); }
   if (!headers_sent()) {
-    setcookie(session_name(), '', time() - 3600, '/');
+    // Mirror the session cookie flags — without Secure/SameSite the
+    // browser keeps the old cookie and the logout silently fails.
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+          || ((int)($_SERVER['SERVER_PORT'] ?? 80) === 443);
+    setcookie(session_name(), '', array(
+      'expires'  => time() - 3600,
+      'path'     => '/',
+      'secure'   => $https,
+      'httponly' => true,
+      'samesite' => 'Lax',
+    ));
   }
 }
 
@@ -95,7 +113,7 @@ function auth_is_setup() {
 /** Burn ~1 bcrypt to normalize timing on failure paths (also slows guessing). */
 function burn_dummy_hash() {
   try {
-    $tmp = password_hash(bin2hex(random_bytes(8)), PASSWORD_DEFAULT);
+    $tmp = pw_hash(bin2hex(random_bytes(8)));
     password_verify('x', $tmp);
   } catch (Exception $e) { /* ignore */ }
 }
@@ -104,15 +122,38 @@ function valid_password($pw) {
   return is_string($pw) && strlen($pw) >= MIN_PASSWORD_LEN && strlen($pw) <= MAX_PASSWORD_LEN;
 }
 
+// --- Modern password hashing: Argon2id where the host offers it, ---------
+// --- bcrypt cost 12 otherwise. verify() accepts every past algorithm, ---
+// --- and successful logins transparently upgrade old hashes. ------------
+function pw_algo() {
+  if (defined('PASSWORD_ARGON2ID')) return PASSWORD_ARGON2ID;
+  return PASSWORD_DEFAULT;
+}
+
+function pw_options() {
+  if (defined('PASSWORD_ARGON2ID') && pw_algo() === PASSWORD_ARGON2ID) {
+    return array('memory_cost' => 65536, 'time_cost' => 3, 'threads' => 1);
+  }
+  return array('cost' => 12);
+}
+
+function pw_hash($pw) {
+  return password_hash((string)$pw, pw_algo(), pw_options());
+}
+
+function pw_needs_rehash($hash) {
+  return password_needs_rehash((string)$hash, pw_algo(), pw_options());
+}
+
 // ---------------------------------------------------------------------------
-// OTP slots  (otp.json: {login:{...}, emailchange:{...}, reset:{...}})
+// OTP slots (otp.json: {setup:{...}, reset:{...}, emailchange:{...}} — one per flow)
 // ---------------------------------------------------------------------------
 function otp_issue($slot, $extra = array()) {
   $code = '';
   for ($i = 0; $i < OTP_LEN; $i++) { $code .= (string)random_int(0, 9); }
   $all = store_read('otp', array());
   $all[$slot] = array_merge(array(
-    'hash'     => password_hash($code, PASSWORD_DEFAULT),
+    'hash'     => pw_hash($code),
     'exp'      => time() + OTP_TTL,
     'attempts' => 0,
     'sentAt'   => time(),
@@ -233,14 +274,14 @@ switch ($action) {
     if (!valid_email($email)) api_fail('invalid_email');
 
     $auth = array(
-      'admin'         => array('hash' => password_hash($pw, PASSWORD_DEFAULT)),
+      'admin'         => array('hash' => pw_hash($pw)),
       'recoveryEmail' => $email,
       'emailVerified' => false,
       'createdAt'     => time(),
     );
     if (!store_write('auth', $auth)) api_fail('storage_error', 500);
 
-    $code = otp_issue('login');
+    $code = otp_issue('setup');
     list($sent, $mailErr) = send_otp_mail($email, $code, 'verify');
     api_json(array('ok' => true, 'emailSent' => $sent, 'mailError' => $sent ? null : $mailErr));
     break;
@@ -251,7 +292,7 @@ switch ($action) {
     list($allowed, $retry) = rate_limit('verify:' . $ip, RL_OTP_VERIFY[0], RL_OTP_VERIFY[1]);
     if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
 
-    $res = otp_check('login', $in['otp'] ?? '');
+    $res = otp_check('setup', $in['otp'] ?? '');
     if ($res !== 'ok') api_fail($res === 'expired' ? 'expired' : 'invalid_code');
 
     $auth = auth_get();
@@ -271,6 +312,10 @@ switch ($action) {
     if (!empty($auth['emailVerified'])) api_fail('already_verified', 409);
     list($allowed, $retry) = rate_limit('setup:' . $ip, RL_SETUP[0], RL_SETUP[1]);
     if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    if (!is_string($in['password'] ?? null) || !password_verify((string)$in['password'], (string)$auth['admin']['hash'])) {
+      burn_dummy_hash();
+      api_fail('invalid_credentials', 401);
+    }
     $auth['verifySkipped'] = true;
     store_write('auth', $auth);
     sec_login();
@@ -293,6 +338,10 @@ switch ($action) {
     if (!is_string($pw) || !password_verify($pw, (string)$auth['admin']['hash'])) {
       burn_dummy_hash();
       api_fail('invalid_credentials', 401);
+    }
+    if (pw_needs_rehash((string)$auth['admin']['hash'])) {
+      $auth['admin']['hash'] = pw_hash($pw);
+      store_write('auth', $auth);
     }
     sec_login();
     api_json(array('ok' => true, 'authenticated' => true));
@@ -321,7 +370,7 @@ switch ($action) {
     $auth = auth_get();
     $match = $auth !== null && hash_equals(strtolower((string)$auth['recoveryEmail']), $email);
     if ($match && valid_email($email)) {
-      $code = otp_issue('login');
+      $code = otp_issue('reset');
       send_otp_mail($email, $code, 'reset'); // result intentionally not exposed
     }
     api_json(array('ok' => true));
@@ -337,7 +386,7 @@ switch ($action) {
     $match = $auth !== null && hash_equals(strtolower((string)$auth['recoveryEmail']), $email);
     if (!$match) { burn_dummy_hash(); api_fail('invalid_code'); }
 
-    $res = otp_check('login', $in['otp'] ?? '');
+    $res = otp_check('reset', $in['otp'] ?? '');
     if ($res === 'expired') api_fail('expired');
     if ($res !== 'ok') api_fail($res === 'locked' ? 'locked' : 'invalid_code');
 
@@ -348,7 +397,7 @@ switch ($action) {
     }
     $all = store_read('otp', array());
     $all['reset'] = array(
-      'hash' => password_hash($token, PASSWORD_DEFAULT),
+      'hash' => pw_hash($token),
       'exp'  => time() + RESET_TOKEN_TTL,
       'used' => false,
     );
@@ -370,7 +419,7 @@ switch ($action) {
 
     $auth = auth_get();
     if ($auth === null) api_fail('not_setup', 409);
-    $auth['admin']['hash'] = password_hash($pw, PASSWORD_DEFAULT);
+    $auth['admin']['hash'] = pw_hash($pw);
     store_write('auth', $auth);
 
     $all['reset']['used'] = true; // single use
@@ -391,7 +440,7 @@ switch ($action) {
       burn_dummy_hash();
       api_fail('invalid_credentials', 401);
     }
-    $auth['admin']['hash'] = password_hash($pw, PASSWORD_DEFAULT);
+    $auth['admin']['hash'] = pw_hash($pw);
     store_write('auth', $auth);
     sec_login(); // fresh session id after credential change
     api_json(array('ok' => true));
@@ -593,6 +642,8 @@ switch ($action) {
 
   case 'backup-delete': {
     if (!sec_is_authed()) api_fail('auth_required', 401);
+    list($allowed, $retry) = rate_limit('backup:' . $ip, RL_BACKUP[0], RL_BACKUP[1]);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
     $name = (string)($in['name'] ?? '');
     if (!backup_valid_name($name)) api_fail('invalid_name');
     $p = backup_dir() . '/' . $name;

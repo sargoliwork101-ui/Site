@@ -5,3 +5,6 @@
 </FilesMatch>
 Options -Indexes -ExecCGI
 php_flag engine off
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>

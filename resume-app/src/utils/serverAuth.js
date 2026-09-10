@@ -126,8 +126,8 @@ export const serverSetup = (password, recoveryEmail) =>
 export const serverVerifySetupOtp = (otp) =>
   postForm(AUTH_URL, 'verify-setup-otp', { otp: String(otp || '') });
 
-export const serverSkipSetupVerify = () =>
-  postForm(AUTH_URL, 'skip-setup-verify', {});
+export const serverSkipSetupVerify = (password) =>
+  postForm(AUTH_URL, 'skip-setup-verify', { password: String(password || '') });
 
 // --- Sessions ----------------------------------------------------------------
 export const serverLogin = (username, password) =>

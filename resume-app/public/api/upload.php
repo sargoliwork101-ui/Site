@@ -44,7 +44,7 @@ if (!is_dir(UPLOADS_DIR) || !is_writable(UPLOADS_DIR)) api_fail('storage_unavail
 // Runtime guards (also shipped in git — some upload tools skip dotfiles)
 $ht = UPLOADS_DIR . '/.htaccess';
 if (!is_file($ht)) {
-  @file_put_contents($ht, "<FilesMatch \"\\.(php|phtml|phar|cgi|pl|py|sh)$\">\n  Require all denied\n</FilesMatch>\nOptions -Indexes -ExecCGI\nphp_flag engine off\n");
+  @file_put_contents($ht, "<FilesMatch \"\\.(php|phtml|phar|cgi|pl|py|sh)$\">\n  Require all denied\n</FilesMatch>\nOptions -Indexes -ExecCGI\nphp_flag engine off\n<IfModule mod_headers.c>\n  Header set X-Content-Type-Options \"nosniff\"\n</IfModule>\n");
 }
 $idx = UPLOADS_DIR . '/index.php';
 if (!is_file($idx)) {

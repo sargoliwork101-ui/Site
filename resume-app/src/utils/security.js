@@ -400,7 +400,10 @@ export const triggerSafeDownload = (blobOrUrl, fileName) => {
  * Format: pbkdf2$<iterations>$<saltHex>$<hashHex>
  */
 
-const PBKDF2_ITERATIONS = 120000;
+// OWASP Password Storage Cheat Sheet (2023): PBKDF2-HMAC-SHA-256 → 600,000
+// iterations. Old hashes keep verifying (count is stored in the string) and
+// are transparently upgraded on the next successful login (see below).
+const PBKDF2_ITERATIONS = 600000;
 
 const bytesToHex = (bytes) =>
   Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -415,6 +418,17 @@ const hexToBytes = (hex) => {
 
 export const isLocalPasswordHash = (value) =>
   typeof value === 'string' && value.startsWith('pbkdf2$');
+
+/**
+ * True when a stored credential should be re-hashed with current settings
+ * after the next successful verification (legacy plaintext, fallback hash,
+ * or PBKDF2 with fewer than the current iteration count).
+ */
+export const needsLocalRehash = (stored) => {
+  if (!isLocalPasswordHash(stored)) return true;
+  const iter = parseInt(String(stored).split('$')[1], 10);
+  return !iter || iter < PBKDF2_ITERATIONS;
+};
 
 export const hasWebCrypto = () =>
   typeof window !== 'undefined' &&
@@ -466,8 +480,15 @@ export async function hashPasswordLocal(password) {
     return `pbkdf2$${PBKDF2_ITERATIONS}$${bytesToHex(salt)}$${bytesToHex(new Uint8Array(bits))}`;
   }
   // No-secure-context fallback: salted + stretched cyrb53 (NOT cryptographic,
-  // but opaque). Local/testing mode only.
-  const salt = Math.floor(Math.random() * 0xffffffff).toString(16);
+  // but opaque). Local/testing mode only. NOTE: getRandomValues works even on
+  // plain HTTP (only `subtle` is gated), so the salt stays cryptographic.
+  let salt = '';
+  try {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+      salt = bytesToHex(window.crypto.getRandomValues(new Uint8Array(16)));
+    }
+  } catch (e) { /* fall through */ }
+  if (!salt) salt = Math.floor(Math.random() * 0xffffffff).toString(16);
   return `simple$20000$${salt}$${fallbackStretchHex(salt, pw, 20000)}`;
 }
 

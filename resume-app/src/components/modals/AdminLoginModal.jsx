@@ -201,6 +201,10 @@ export const AdminLoginModal = () => {
       setError(isFa ? 'رمز عبور باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.');
       return;
     }
+    if (setupPassword.length > 72) {
+      setError(isFa ? 'رمز عبور باید حداکثر ۷۲ کاراکتر باشد.' : 'Password must be at most 72 characters.');
+      return;
+    }
     if (setupPassword !== setupPassword2) {
       setError(isFa ? 'تکرار رمز عبور مطابقت ندارد.' : 'Passwords do not match.');
       return;
@@ -250,7 +254,7 @@ export const AdminLoginModal = () => {
     if (isBusy) return;
     setIsBusy(true);
     try {
-      await skipServerSetupVerify(); // closes modal + logs in (unverified)
+      await skipServerSetupVerify(setupPassword); // closes modal + logs in (unverified)
     } finally {
       setIsBusy(false);
     }
@@ -345,6 +349,10 @@ export const AdminLoginModal = () => {
     if (isBusy) return;
     if (newPasswordInput.length < 8) {
       setError(isFa ? 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد.' : 'Password must be at least 8 characters.');
+      return;
+    }
+    if (newPasswordInput.length > 72) {
+      setError(isFa ? 'رمز عبور جدید باید حداکثر ۷۲ کاراکتر باشد.' : 'Password must be at most 72 characters.');
       return;
     }
     if (newPasswordInput !== confirmPasswordInput) {

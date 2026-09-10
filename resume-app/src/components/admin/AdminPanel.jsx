@@ -653,6 +653,10 @@ export const AdminPanel = () => {
       showToast('رمز عبور جدید باید حداقل ۸ کاراکتر باشد.', 'error');
       return;
     }
+    if (newPassword.length > 72) {
+      showToast('رمز عبور جدید باید حداکثر ۷۲ کاراکتر باشد.', 'error');
+      return;
+    }
     if (newPassword !== confirmNewPassword) {
       showToast('تکرار رمز عبور با رمز عبور جدید مطابقت ندارد.', 'error');
       return;
