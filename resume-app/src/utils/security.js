@@ -554,3 +554,37 @@ export const sanitizeSvgDataUrl = (dataUrl) => {
     return dataUrl;
   }
 };
+
+/**
+ * Copy text to the clipboard RELIABLY. Modern async clipboard first, with a
+ * textarea + execCommand fallback for insecure contexts / older browsers
+ * (where navigator.clipboard is undefined and a bare writeText call throws).
+ * @param {string} text
+ * @returns {Promise<boolean>} true on success, false on failure/empty
+ */
+export async function copyTextToClipboard(text) {
+  const str = String(text ?? '');
+  if (!str) return false;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(str);
+      return true;
+    }
+  } catch (e) { /* fall through to the legacy path */ }
+  try {
+    if (typeof document === 'undefined') return false;
+    const ta = document.createElement('textarea');
+    ta.value = str;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok === true;
+  } catch (e) {
+    return false;
+  }
+}

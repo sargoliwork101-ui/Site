@@ -16,7 +16,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { formatNum } from '../../utils/numberHelper';
-import { sanitizeRichHtml } from '../../utils/security';
+import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';
 import {
   X,
   Search,
@@ -136,12 +136,16 @@ export const BlogModal = () => {
   };
 
   // Handle Share Link
-  const handleShare = (post, e) => {
+  const handleShare = async (post, e) => {
     e?.stopPropagation();
-    navigator.clipboard.writeText(window.location.href);
-    setCopiedLink(true);
-    showToast(isFa ? 'لینک مقاله در کلیپ‌بورد کپی شد.' : 'Article link copied to clipboard.');
-    setTimeout(() => setCopiedLink(false), 2500);
+    const ok = await copyTextToClipboard(window.location.href);
+    if (ok) {
+      setCopiedLink(true);
+      showToast(isFa ? 'لینک مقاله در کلیپ‌بورد کپی شد.' : 'Article link copied to clipboard.');
+      setTimeout(() => setCopiedLink(false), 2500);
+    } else {
+      showToast(isFa ? 'کپی نشد؛ لینک را دستی کپی کنید.' : 'Copy failed; please copy manually.', 'error');
+    }
   };
 
   return (

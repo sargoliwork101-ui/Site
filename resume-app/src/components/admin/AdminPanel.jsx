@@ -4,7 +4,7 @@ import { RichTextEditorModal } from '../common/RichTextEditorModal';
 import { TaxonomyManager } from '../common/TaxonomyManager';
 import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
-import { validateUploadFile, sanitizeSvgDataUrl } from '../../utils/security';
+import { validateUploadFile, sanitizeSvgDataUrl, copyTextToClipboard } from '../../utils/security';
 import { serverSmtpGet, serverSmtpSave, serverSmtpReveal, serverSmtpTest } from '../../utils/serverAuth';
 import {
   serverBackupSave,
@@ -1581,9 +1581,9 @@ export const AdminPanel = () => {
 
                         <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-1">
                           <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(item.url);
-                              showToast('آدرس فایل در حافظه کپی شد.');
+                            onClick={async () => {
+                              const ok = await copyTextToClipboard(item.url);
+                              showToast(ok ? 'آدرس فایل در حافظه کپی شد.' : 'کپی نشد؛ آدرس را دستی کپی کنید.', ok ? 'success' : 'error');
                             }}
                             className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-300 text-[10px] flex items-center gap-1"
                           >

@@ -41,6 +41,28 @@ const AdminPanel = lazy(() =>
   import('./components/admin/AdminPanel').then((m) => ({ default: m.AdminPanel }))
 );
 
+// Shown while the (heavy, code-split) AdminPanel chunk downloads after a
+// successful login — so the user SEES progress instead of a dead gap.
+const PanelBootLoader = () => {
+  const { data } = useData();
+  const isFa = data?.siteConfig?.language === 'fa';
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-md animate-fadeIn">
+      <div className="w-72 space-y-4 text-center">
+        <div className="text-sm font-bold text-white">
+          {isFa ? 'در حال باز کردن پنل مدیریت...' : 'Opening admin panel...'}
+        </div>
+        <div className="h-2 rounded-full bg-slate-800 overflow-hidden" dir="ltr">
+          <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 animate-panel-boot" />
+        </div>
+        <div className="text-[11px] text-slate-400 font-mono">
+          {isFa ? 'لطفاً چند لحظه صبر کنید' : 'Loading admin workspace...'}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function MainLayout() {
   const {
     currentTemplate,
@@ -129,6 +151,9 @@ function MainLayout() {
         {isTemplatePickerOpen && <TemplatePickerModal />}
         {isPdfModalOpen && <PdfResumeModal />}
         {isLoginModalOpen && <AdminLoginModal />}
+      </Suspense>
+      {/* Admin workspace gets its own loader: the chunk is heavy (~300KB). */}
+      <Suspense fallback={<PanelBootLoader />}>
         {isAdminOpen && <AdminPanel />}
       </Suspense>
     </div>

@@ -31,7 +31,8 @@ import {
   hashPasswordLocal,
   verifyPasswordLocal,
   isLocalPasswordHash,
-  hasWebCrypto
+  hasWebCrypto,
+  copyTextToClipboard
 } from '../utils/security';
 import {
   fetchServerStatus,
@@ -2374,7 +2375,8 @@ export const DataProvider = ({ children }) => {
   const copyBackupToClipboard = async () => {
     try {
       const fullBackupObject = buildFullBackup();
-      await navigator.clipboard.writeText(JSON.stringify(fullBackupObject, null, 2));
+      const ok = await copyTextToClipboard(JSON.stringify(fullBackupObject, null, 2));
+      if (!ok) throw new Error('copy_failed');
       showToast('کد بک‌آپ کامل سایت در کلیپ‌بورد کپی شد!');
       return true;
     } catch (e) {

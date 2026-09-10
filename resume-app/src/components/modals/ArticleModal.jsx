@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
-import { sanitizeRichHtml } from '../../utils/security';
+import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';
 import {
   X,
   BookOpen,
@@ -26,11 +26,15 @@ export const ArticleModal = () => {
 
   const hasPdf = selectedArticle.pdfUrl && selectedArticle.pdfUrl !== '#' && selectedArticle.pdfUrl.trim() !== '';
 
-  const copyArticleLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    showToast(isFa ? 'لینک مقاله در حافظه کپی شد.' : 'Article URL copied to clipboard.');
-    setTimeout(() => setCopied(false), 2000);
+  const copyArticleLink = async () => {
+    const ok = await copyTextToClipboard(window.location.href);
+    if (ok) {
+      setCopied(true);
+      showToast(isFa ? 'لینک مقاله در حافظه کپی شد.' : 'Article URL copied to clipboard.');
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      showToast(isFa ? 'کپی نشد؛ لینک را دستی کپی کنید.' : 'Copy failed; please copy manually.', 'error');
+    }
   };
 
   const printArticle = () => {

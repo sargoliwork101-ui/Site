@@ -24,7 +24,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { CustomAudioPlayer } from '../common/CustomAudioPlayer';
 import { formatNum } from '../../utils/numberHelper';
-import { sanitizeRichHtml } from '../../utils/security';
+import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';
 import {
   Newspaper,
   ArrowRight,
@@ -159,13 +159,17 @@ export const BlogPortalPage = () => {
   };
 
   // Handle Share Link
-  const handleShare = (post, e) => {
+  const handleShare = async (post, e) => {
     e?.stopPropagation();
     const url = `${window.location.origin}${window.location.pathname}#blog/${post.slug || post.id}`;
-    navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    showToast(isFa ? 'لینک مستقیم مقاله در کلیپ‌بورد کپی شد.' : 'Article direct URL copied to clipboard.');
-    setTimeout(() => setCopiedLink(false), 2500);
+    const ok = await copyTextToClipboard(url);
+    if (ok) {
+      setCopiedLink(true);
+      showToast(isFa ? 'لینک مستقیم مقاله در کلیپ‌بورد کپی شد.' : 'Article direct URL copied to clipboard.');
+      setTimeout(() => setCopiedLink(false), 2500);
+    } else {
+      showToast(isFa ? 'کپی نشد؛ لینک را دستی کپی کنید.' : 'Copy failed; please copy manually.', 'error');
+    }
   };
 
   // Handle Admin Button Click

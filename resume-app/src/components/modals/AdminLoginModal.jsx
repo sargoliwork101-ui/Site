@@ -102,6 +102,14 @@ export const AdminLoginModal = () => {
     }
   }, [isLoginModalOpen, adminSecurity?.recoveryEmail, data?.personalInfo?.email]);
 
+  // Warm the heavy AdminPanel chunk while the user types credentials, so the
+  // panel opens instantly after a successful login (same chunk lazy() uses).
+  useEffect(() => {
+    if (isLoginModalOpen) {
+      import('../admin/AdminPanel').catch(() => {});
+    }
+  }, [isLoginModalOpen]);
+
   // Monitor Rate Limiter Cooldown
   useEffect(() => {
     let interval = null;

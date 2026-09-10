@@ -14,12 +14,13 @@ import {
   FileSpreadsheet,
   Download,
   AlertCircle,
+  Check,
   Paperclip,
   Upload,
   X
 } from 'lucide-react';
 import { Github, Linkedin } from '../common/BrandIcons';
-import { sanitizeText, validateEmail, contactRateLimiter, triggerSafeDownload } from '../../utils/security';
+import { sanitizeText, validateEmail, contactRateLimiter, triggerSafeDownload, copyTextToClipboard } from '../../utils/security';
 import { serverContact, serverUploadAttachment } from '../../utils/serverAuth';
 
 const MAX_FILE_BYTES = 20971520; // 20MB
@@ -52,6 +53,7 @@ export const ContactSection = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   const handleFileSelect = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -264,9 +266,16 @@ export const ContactSection = () => {
     }, 400);
   };
 
-  const copyEmail = () => {
-    navigator.clipboard.writeText(info.email);
-    showToast(isFa ? 'آدرس ایمیل با موفقیت کپی شد.' : 'Email copied to clipboard.');
+  const copyEmail = async () => {
+    if (!info.email) return;
+    const ok = await copyTextToClipboard(info.email);
+    if (ok) {
+      setEmailCopied(true);
+      showToast(isFa ? 'آدرس ایمیل با موفقیت کپی شد.' : 'Email copied to clipboard.');
+      setTimeout(() => setEmailCopied(false), 2000);
+    } else {
+      showToast(isFa ? 'کپی نشد؛ ایمیل را دستی انتخاب و کپی کنید.' : 'Copy failed; please select and copy manually.', 'error');
+    }
   };
 
   const downloadVCard = () => {
@@ -329,11 +338,11 @@ END:VCARD`;
               </div>
               <button
                 onClick={copyEmail}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                className={`p-2 rounded-xl transition-colors ${emailCopied ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'}`}
                 title={isFa ? 'کپی ایمیل' : 'Copy Email'}
                 aria-label="Copy Email"
               >
-                <Copy className="w-4 h-4" />
+                {emailCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
 
