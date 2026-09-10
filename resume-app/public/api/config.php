@@ -37,6 +37,11 @@ define('RESET_TOKEN_TTL', 600);    // 10 minutes, single use
 // --- Rate limits: [max attempts, window seconds] ---
 define('RL_SETUP', [10, 3600]);
 define('RL_LOGIN', [5, 300]);
+// --- Brute-force lockout: N wrong passwords → hard freeze + email alert ---
+define('LOCKOUT_FAILS', 3);
+define('LOCKOUT_SECONDS', 30);
+define('LOCKOUT_FAIL_WINDOW', 600);    // failures older than 10 min don't count
+define('LOCKOUT_ALERT_COOLDOWN', 300); // max 1 alert email per 5 min per IP
 define('RL_OTP_REQUEST', [3, 600]);
 define('RL_OTP_VERIFY', [10, 600]);
 define('RL_CONTACT', [5, 3600]);

@@ -165,6 +165,14 @@ export const AdminLoginModal = () => {
           setError('');
           return;
         }
+        if (result.error === 'locked' || result.error === 'rate_limit') {
+          // 3-strikes lockout (server or local): the shield banner shows the
+          // countdown, so no separate error text is needed.
+          const secs = result.retryAfter || loginRateLimiter.getRemainingCooldownSeconds();
+          setCooldownSeconds(secs > 0 ? secs : 30);
+          setError('');
+          return;
+        }
         if (result.error === 'insecure_context') {
           // Password was NOT checked — the browser simply refuses WebCrypto
           // on this origin. Never disguise it as 'wrong password'.

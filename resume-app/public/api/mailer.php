@@ -273,6 +273,33 @@ function send_otp_mail($to, $code, $purpose = 'reset') {
   return send_html_mail($to, $subject, $html, $text);
 }
 
+/** Brute-force lockout alert to the admin's recovery email. */
+function send_lockout_mail($to, $ip) {
+  $when = date('Y-m-d H:i:s');
+  $subject = '⚠️ هشدار امنیتی: ۳ ورود ناموفق — ورود ۳۰ ثانیه قفل شد';
+  $esc = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+
+  $html = '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;background:#0b0f19;color:#f1f5f9;padding:32px;line-height:2;">'
+    . '<div style="max-width:520px;margin:0 auto;background:#111827;border:1px solid #7f1d1d;border-radius:16px;padding:28px;text-align:center;">'
+    . '<h2 style="margin:0 0 8px;color:#f87171;">🛡️ تلاش‌های ناموفق ورود شناسایی شد</h2>'
+    . '<p style="color:#94a3b8;font-size:13px;">۳ بار رمز اشتباه وارد شد، پس ورود از این آدرس به مدت ۳۰ ثانیه قفل شد.</p>'
+    . '<table style="width:100%;border-collapse:collapse;margin:14px 0;text-align:right;">'
+    . '<tr><td style="padding:8px 12px;color:#94a3b8;font-size:13px;">آدرس مهاجم (IP)</td>'
+    . '<td style="padding:8px 12px;color:#f1f5f9;font-size:13px;font-family:monospace;" dir="ltr">' . $esc($ip) . '</td></tr>'
+    . '<tr><td style="padding:8px 12px;color:#94a3b8;font-size:13px;">زمان</td>'
+    . '<td style="padding:8px 12px;color:#f1f5f9;font-size:13px;font-family:monospace;" dir="ltr">' . $esc($when) . ' UTC</td></tr>'
+    . '</table>'
+    . '<p style="color:#f59e0b;font-size:13px;">اگر خودتان بودید، ۳۰ ثانیه صبر کنید و دوباره وارد شوید. در غیر این صورت فوراً رمز مدیر را عوض کنید.</p>'
+    . '</div></div>';
+
+  $text = 'هشدار امنیتی سایت' . "\n\n"
+    . '۳ ورود ناموفق از IP ' . $ip . ' در ' . $when . ' UTC' . "\n"
+    . 'ورود ۳۰ ثانیه قفل شد.' . "\n\n"
+    . 'اگر خودتان نبودید، فوراً رمز مدیر را عوض کنید.';
+
+  return send_html_mail($to, $subject, $html, $text);
+}
+
 /** Contact-form message forwarded to the admin. */
 function contact_attachment_row($attachmentUrl, $attachmentName, $esc) {
   if ($attachmentUrl === '') return '';

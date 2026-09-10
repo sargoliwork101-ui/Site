@@ -351,7 +351,7 @@ export class RateLimiter {
   }
 }
 
-export const loginRateLimiter = new RateLimiter(5, 30000, 'admin_login'); // 5 attempts per 30 seconds
+export const loginRateLimiter = new RateLimiter(3, 30000, 'admin_login'); // 3-strikes UX mirror (server enforces the real lockout)
 export const contactRateLimiter = new RateLimiter(3, 60000, 'contact_form'); // 3 submissions per minute
 export const otpRateLimiter = new RateLimiter(3, 60000, 'otp_requests'); // 3 OTP requests per minute
 

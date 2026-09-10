@@ -145,6 +145,70 @@ function pw_needs_rehash($hash) {
   return password_needs_rehash((string)$hash, pw_algo(), pw_options());
 }
 
+// Length-guarded hash_equals: PHP 8 THROWS ValueError on length mismatch,
+// so compare lengths first (wrong-length input = simply not equal).
+function hash_eq($a, $b) {
+  $a = (string)$a;
+  $b = (string)$b;
+  if (strlen($a) !== strlen($b)) return false;
+  return hash_equals($a, $b);
+}
+
+// --- Brute-force lockout (keyed by IP — NEVER by account, so an attacker -
+// --- cannot DoS the real admin by locking THEIR account with bad guesses). -
+function login_lockout_check($ip) {
+  $all = store_read('lockout', array());
+  $e = (isset($all['login:' . $ip]) && is_array($all['login:' . $ip])) ? $all['login:' . $ip] : null;
+  if ($e === null) return 0;
+  $until = (int)($e['lockedUntil'] ?? 0);
+  return ($until > time()) ? ($until - time()) : 0;
+}
+
+function login_lockout_fail($ip) {
+  $now = time();
+  $all = store_read('lockout', array());
+  $k = 'login:' . $ip;
+  $e = (isset($all[$k]) && is_array($all[$k])) ? $all[$k] : array();
+  if ((int)($e['lockedUntil'] ?? 0) > $now) return; // already locked: no churn
+  if ((int)($e['lastFailAt'] ?? 0) > 0 && ($now - (int)$e['lastFailAt']) > LOCKOUT_FAIL_WINDOW) {
+    $e['fails'] = 0; // stale failures expire
+  }
+  $e['lastFailAt'] = $now;
+  $e['fails'] = (int)($e['fails'] ?? 0) + 1;
+  if ($e['fails'] >= LOCKOUT_FAILS) {
+    $e['fails'] = 0;
+    $e['lockedUntil'] = $now + LOCKOUT_SECONDS;
+    // Email alert (cooldown-guarded, fire-and-forget — never blocks login).
+    if (($now - (int)($e['alertAt'] ?? 0)) >= LOCKOUT_ALERT_COOLDOWN) {
+      $e['alertAt'] = $now;
+      $auth = auth_get();
+      $to = ($auth !== null) ? (string)($auth['recoveryEmail'] ?? '') : '';
+      if (valid_email($to)) {
+        try { send_lockout_mail($to, $ip); } catch (Exception $ex) { /* ignore */ }
+      }
+    }
+  }
+  $all[$k] = $e;
+  // Prune dead entries so the file stays tiny.
+  foreach ($all as $kk => $vv) {
+    if (!is_array($vv)) { unset($all[$kk]); continue; }
+    $lu = (int)($vv['lockedUntil'] ?? 0);
+    $aa = (int)($vv['alertAt'] ?? 0);
+    $ff = (int)($vv['fails'] ?? 0);
+    if ($lu < $now && $aa < $now - LOCKOUT_ALERT_COOLDOWN && $ff === 0) unset($all[$kk]);
+  }
+  store_write('lockout', $all);
+}
+
+function login_lockout_clear($ip) {
+  $all = store_read('lockout', array());
+  $k = 'login:' . $ip;
+  if (isset($all[$k])) {
+    unset($all[$k]);
+    store_write('lockout', $all);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // OTP slots (otp.json: {setup:{...}, reset:{...}, emailchange:{...}} — one per flow)
 // ---------------------------------------------------------------------------
@@ -327,6 +391,9 @@ switch ($action) {
   case 'login': {
     list($allowed, $retry) = rate_limit('login:' . $ip, RL_LOGIN[0], RL_LOGIN[1]);
     if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    // Hard lockout: 3 wrong passwords → 30s freeze (+ email alert on trigger).
+    $lockLeft = login_lockout_check($ip);
+    if ($lockLeft > 0) api_fail('locked', 429, array('retryAfter' => $lockLeft));
     if (!auth_is_setup()) api_fail('not_setup', 409);
 
     $user = strtolower(trim((string)($in['username'] ?? '')));
@@ -334,11 +401,13 @@ switch ($action) {
     $auth = auth_get();
 
     // Generic failure either way (no account enumeration).
-    if (!hash_equals('admin', $user)) { burn_dummy_hash(); api_fail('invalid_credentials', 401); }
+    if (!hash_eq('admin', $user)) { burn_dummy_hash(); login_lockout_fail($ip); api_fail('invalid_credentials', 401); }
     if (!is_string($pw) || !password_verify($pw, (string)$auth['admin']['hash'])) {
       burn_dummy_hash();
+      login_lockout_fail($ip);
       api_fail('invalid_credentials', 401);
     }
+    login_lockout_clear($ip);
     if (pw_needs_rehash((string)$auth['admin']['hash'])) {
       $auth['admin']['hash'] = pw_hash($pw);
       store_write('auth', $auth);
@@ -368,7 +437,7 @@ switch ($action) {
     if (!$cdOk) api_json(array('ok' => true, 'retryAfter' => $cdRetry));
 
     $auth = auth_get();
-    $match = $auth !== null && hash_equals(strtolower((string)$auth['recoveryEmail']), $email);
+    $match = $auth !== null && hash_eq(strtolower((string)$auth['recoveryEmail']), $email);
     if ($match && valid_email($email)) {
       $code = otp_issue('reset');
       send_otp_mail($email, $code, 'reset'); // result intentionally not exposed
@@ -383,7 +452,7 @@ switch ($action) {
 
     $email = strtolower(trim((string)($in['email'] ?? '')));
     $auth = auth_get();
-    $match = $auth !== null && hash_equals(strtolower((string)$auth['recoveryEmail']), $email);
+    $match = $auth !== null && hash_eq(strtolower((string)$auth['recoveryEmail']), $email);
     if (!$match) { burn_dummy_hash(); api_fail('invalid_code'); }
 
     $res = otp_check('reset', $in['otp'] ?? '');

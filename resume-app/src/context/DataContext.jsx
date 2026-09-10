@@ -1512,7 +1512,7 @@ export const DataProvider = ({ children }) => {
             : 'نام کاربری یا رمز عبور وارد شده نادرست است!',
           'error'
         );
-        return { success: false, error: r.error || 'invalid_credentials' };
+        return { success: false, error: r.error || 'invalid_credentials', retryAfter: r.retryAfter || 0 };
       }
       loginRateLimiter.reset();
       await refreshBackend();
