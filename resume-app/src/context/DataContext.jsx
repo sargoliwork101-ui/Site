@@ -742,10 +742,23 @@ export const DataProvider = ({ children }) => {
     // stamp here would fake "local is newest" and block adopting the server).
     if (dataMountRef.current) { dataMountRef.current = false; return; }
     try {
-      const stamped = { ...data, updatedAt: Date.now() };
+      // Unix SECONDS (PHP time()) — milliseconds would always fail the
+      // server's timestamp check and every push would be rejected.
+      const stamped = { ...data, updatedAt: Math.floor(Date.now() / 1000) };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stamped));
       if (syncAdoptRef.current) { syncAdoptRef.current = false; return; }
-      if (!backend?.available || !isAuthenticated) { syncDirtyRef.current = true; return; }
+      if (!backend?.available) { syncDirtyRef.current = true; return; } // pure local: nothing to sync to
+      if (!backend?.authenticated) {
+        // Logged in locally but the SERVER has no admin session → its
+        // endpoint would refuse the publish, so say so honestly instead.
+        syncDirtyRef.current = true;
+        if (!syncWarnedRef.current) {
+          syncWarnedRef.current = true;
+          showToast('همگام‌سازی سرور نیاز به ورود مدیر دارد؛ تغییرات فقط محلی ذخیره شد.', 'warning');
+        }
+        return;
+      }
+      if (!isAuthenticated) { syncDirtyRef.current = true; return; }
       pushContentToServer(stamped);
     } catch (e) {
       console.error('Failed to persist data', e);
@@ -1463,12 +1476,15 @@ export const DataProvider = ({ children }) => {
       try {
         const srv = await serverContentGet();
         if (srv && srv.ok && !srv.empty && srv.content && typeof srv.content === 'object') {
+          // normTs: tolerate millisecond stamps (written by the first sync
+          // build) so old local copies compare correctly against seconds.
+          const normTs = (t) => (typeof t !== 'number' || !(t > 0) ? 0 : (t > 4102444800 ? Math.floor(t / 1000) : t));
           let localTs = 0;
           try {
             const rawLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            localTs = (rawLocal && typeof rawLocal.updatedAt === 'number') ? rawLocal.updatedAt : 0;
+            localTs = normTs(rawLocal && rawLocal.updatedAt);
           } catch (e) { /* treat as no local copy */ }
-          const serverTs = (typeof srv.updatedAt === 'number') ? srv.updatedAt : 0;
+          const serverTs = normTs(srv.updatedAt);
           if (serverTs > localTs) {
             if (syncDirtyRef.current) {
               showToast('نسخه جدیدتری روی سرور هست ولی تغییرات ذخیره‌نشده محلی دارید؛ نسخه محلی نگه داشته شد.', 'warning');
