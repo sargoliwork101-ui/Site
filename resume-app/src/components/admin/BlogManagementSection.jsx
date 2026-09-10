@@ -250,7 +250,7 @@ export const BlogManagementSection = () => {
   );
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-none">
       {/* 1. TOP STATS BAR */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center gap-3 shadow-lg">

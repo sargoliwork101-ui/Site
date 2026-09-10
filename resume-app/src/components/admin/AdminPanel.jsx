@@ -1254,9 +1254,9 @@ export const AdminPanel = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-xl animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 bg-slate-950 backdrop-blur-xl animate-fadeIn">
       <div
-        className="relative w-full max-w-[1600px] h-[96vh] rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-full h-full max-w-none rounded-none bg-slate-900 border border-slate-800 shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Hidden File Input for Image Uploading */}
@@ -1404,7 +1404,7 @@ export const AdminPanel = () => {
           <main className="flex-1 p-4 sm:p-6 overflow-y-auto bg-slate-900/50">
             {/* 1. DASHBOARD OVERVIEW TAB */}
             {activeTab === 'dashboard' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="space-y-6 max-w-none">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <div className="text-2xl font-black font-mono text-cyan-400">{data.boards.length}</div>
@@ -1448,7 +1448,7 @@ export const AdminPanel = () => {
 
             {/* 3. MEDIA LIBRARY TAB */}
             {activeTab === 'media' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="space-y-6 max-w-none">
                 <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
                     <h4 className="text-base font-bold text-white flex items-center gap-2">
@@ -1847,7 +1847,7 @@ export const AdminPanel = () => {
 
             {/* 5. HARDWARE BOARDS TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
             {activeTab === 'boards' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="space-y-6 max-w-none">
                 {boardForm ? (
                   <form onSubmit={handleBoardSave} className="space-y-5 p-6 rounded-3xl bg-slate-950/90 border border-slate-800 shadow-2xl">
                     <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -2721,7 +2721,7 @@ export const AdminPanel = () => {
 
             {/* 6. ARTICLES TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
             {activeTab === 'articles' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="space-y-6 max-w-none">
                 {articleForm ? (
                   <form onSubmit={handleArticleSave} className="space-y-4 p-6 rounded-2xl bg-slate-950/80 border border-slate-800">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -3149,7 +3149,7 @@ export const AdminPanel = () => {
 
             {/* 7. SKILLS & CARDS STUDIO TAB (FULL BILINGUAL) */}
             {activeTab === 'skills' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="space-y-6 max-w-none">
                 <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
                     <h4 className="text-base font-bold text-white flex items-center gap-2">
@@ -3381,7 +3381,7 @@ export const AdminPanel = () => {
 
             {/* 8. EXPERIENCE TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
             {activeTab === 'experience' && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="space-y-6 max-w-none">
                 {/* Sub-tab Navigation */}
                 <div className="flex items-center gap-2 p-1.5 bg-slate-950 rounded-2xl border border-slate-800">
                   <button
@@ -4046,7 +4046,7 @@ export const AdminPanel = () => {
 
             {/* 9. MESSAGES INBOX TAB */}
             {activeTab === 'inbox' && (
-              <div className="space-y-4 max-w-5xl">
+              <div className="space-y-4 max-w-none">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-white">صندوق پیام‌های تماس مستقیم ({messages.length})</h4>
                   <button
