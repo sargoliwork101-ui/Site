@@ -30,7 +30,7 @@ export const Navbar = () => {
   } = useData();
 
   const [isScrolled, setIsScrolled] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const lang = data?.siteConfig?.language || 'fa';
   const isFa = lang === 'fa';
@@ -56,11 +56,17 @@ export const Navbar = () => {
   ].filter((l) => l.show);
 
   const handleAdminClick = () => {
+    setMenuOpen(false);
     if (isAuthenticated) {
       setIsAdminOpen(true);
     } else {
       setIsLoginModalOpen(true);
     }
+  };
+
+  const handleLanguageClick = () => {
+    setMenuOpen(false);
+    toggleLanguage();
   };
 
   return (
@@ -75,6 +81,7 @@ export const Navbar = () => {
         borderColor: isScrolled ? (currentTemplate?.colors?.border || '#1e293b') : 'transparent',
       }}
     >
+      {/* Bar: brand + hamburger only, at every width — nothing left to overlap */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
         {/* Brand / Logo */}
         <a href="#hero" className="flex items-center gap-3 group shrink-0 min-w-0">
@@ -105,135 +112,69 @@ export const Navbar = () => {
           </div>
         </a>
 
-        {/* Desktop Navigation Links (xl+ only — below that the drawer takes over,
-            so links never squeeze against the action buttons) */}
-        <nav className="hidden xl:flex items-center gap-0.5 rounded-2xl px-2 py-1 backdrop-blur-md border border-slate-800/80 bg-slate-900/40 min-w-0">
-          {navLinks.map((link) => {
-            const Icon = link.icon;
-            return (
-              <a
-                key={link.id}
-                href={link.href}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white rounded-xl transition-colors hover:bg-slate-800/60 whitespace-nowrap"
-              >
-                <Icon className="w-3.5 h-3.5 opacity-70 shrink-0" />
-                <span>{isFa ? link.labelFa : link.labelEn}</span>
-              </a>
-            );
-          })}
-
-          {/* Dedicated Standalone Blog Portal Trigger (same box as links,
-              distinguished only by color — no extra border/ping noise) */}
-          <button
-            onClick={() => navigateToBlog()}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-xl transition-colors bg-cyan-500/10 hover:bg-cyan-500/20 whitespace-nowrap"
-            title={isFa ? 'مشاهده وبلاگ و یادداشت‌های تخصصی مهندسی' : 'Open Engineering Blog & Technical Insights'}
-          >
-            <Newspaper className="w-3.5 h-3.5 shrink-0" />
-            <span>{isFa ? 'وبلاگ تخصصی' : 'Tech Blog'}</span>
-          </button>
-        </nav>
-
-        {/* Action Controls & Modal Buttons (uniform h-9 boxes) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Blog Button on Medium Screens */}
-          <button
-            onClick={() => navigateToBlog()}
-            className="hidden sm:flex xl:hidden items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/40 shadow-sm whitespace-nowrap"
-            title={isFa ? 'وبلاگ مهندسی' : 'Tech Blog'}
-          >
-            <Newspaper className="w-3.5 h-3.5 text-cyan-400" />
-            <span>{isFa ? 'وبلاگ' : 'Blog'}</span>
-          </button>
-
-          {/* Global Search Button (icon-only, uniform box) */}
-          <button
-            onClick={() => setIsSearchModalOpen(true)}
-            className="w-9 h-9 grid place-items-center rounded-xl text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/50 transition-all shadow-sm"
-            title={isFa ? 'جستجوی هوشمند در سایت (Ctrl + K)' : 'Spotlight Search (Ctrl + K)'}
-          >
-            <Search className="w-4 h-4 text-cyan-400" />
-          </button>
-
-          {/* Download PDF Resume Button */}
-          <button
-            onClick={() => setIsPdfModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 h-9 w-9 lg:w-auto lg:px-3.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 transition-all hover:text-white shadow-sm whitespace-nowrap"
-            title={isFa ? 'مشاهده و دانلود نسخه PDF رزومه' : 'View & Download Resume PDF'}
-          >
-            <FileDown className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="hidden lg:inline">{isFa ? 'دانلود PDF رزومه' : 'PDF Resume'}</span>
-          </button>
-
-          {/* Admin Panel Button */}
-          <button
-            onClick={handleAdminClick}
-            className={`flex items-center justify-center gap-1.5 h-9 w-9 lg:w-auto lg:px-3.5 rounded-xl text-xs font-bold transition-all border shadow-sm whitespace-nowrap ${
-              isAuthenticated
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
-                : 'bg-slate-800/80 text-amber-300 border-amber-500/40 hover:bg-amber-500/20'
-            }`}
-            title={isFa ? 'ورود به پنل مدیریت پیشرفته سایت' : 'Super Admin Workspace Login'}
-          >
-            <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="hidden lg:inline">{isFa ? 'پنل مدیریت' : 'Admin Panel'}</span>
-          </button>
-
-          {/* Language Switcher */}
-          <button
-            onClick={toggleLanguage}
-            className="h-9 px-2.5 flex items-center rounded-xl text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/50 transition-colors text-xs font-mono font-bold whitespace-nowrap"
-            title={isFa ? 'تغییر زبان سایت (فارسی / English)' : 'Switch Site Language (FA / EN)'}
-          >
-            <span className="flex items-center gap-1">
-              <Globe className="w-3.5 h-3.5 text-sky-400" />
-              <span>{isFa ? 'EN' : 'فا'}</span>
-            </span>
-          </button>
-
-          {/* Mobile Menu Toggle */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="xl:hidden w-9 h-9 grid place-items-center rounded-xl bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/50"
-            aria-label="Toggle navigation menu"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
+        {/* Menu Toggle (all screen sizes) */}
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="w-10 h-10 grid place-items-center rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/50 transition-colors shrink-0"
+          aria-label={isFa ? 'باز و بسته کردن منو' : 'Toggle navigation menu'}
+          title={isFa ? 'منوی سایت' : 'Site menu'}
+        >
+          {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </div>
 
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="xl:hidden bg-slate-900/95 backdrop-blur-2xl border-b border-slate-800 px-4 pt-3 pb-6 mt-3 space-y-2 animate-fadeIn">
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <button
-              onClick={() => {
-                setIsSearchModalOpen(true);
-                setMobileMenuOpen(false);
-              }}
-              className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 border border-slate-700"
-            >
-              <Search className="w-4 h-4 text-cyan-400" />
-              <span>{isFa ? 'جستجوی سایت' : 'Search Site'}</span>
-            </button>
-            <button
-              onClick={() => {
-                setIsPdfModalOpen(true);
-                setMobileMenuOpen(false);
-              }}
-              className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 border border-slate-700"
-            >
-              <FileDown className="w-4 h-4 text-emerald-400" />
-              <span>{isFa ? 'دانلود PDF' : 'PDF Resume'}</span>
-            </button>
-          </div>
+      {/* Dropdown Menu (all screen sizes) */}
+      {menuOpen && (
+        <div className="bg-slate-900/95 backdrop-blur-2xl border-b border-slate-800 mt-3 animate-fadeIn">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-6 space-y-2">
+            {/* Quick actions */}
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 mb-3">
+              <button
+                onClick={() => {
+                  setIsSearchModalOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
+              >
+                <Search className="w-4 h-4 text-cyan-400" />
+                <span>{isFa ? 'جستجوی سایت' : 'Search Site'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setIsPdfModalOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
+              >
+                <FileDown className="w-4 h-4 text-emerald-400" />
+                <span>{isFa ? 'دانلود PDF رزومه' : 'PDF Resume'}</span>
+              </button>
+              <button
+                onClick={handleAdminClick}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold border ${
+                  isAuthenticated
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                    : 'bg-slate-800 text-amber-300 hover:bg-slate-700 border-amber-500/40'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>{isFa ? 'پنل مدیریت' : 'Admin Panel'}</span>
+              </button>
+              <button
+                onClick={handleLanguageClick}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
+              >
+                <Globe className="w-3.5 h-3.5 text-sky-400" />
+                <span>{isFa ? 'English version' : 'نسخه فارسی'}</span>
+              </button>
+            </div>
 
-          <div className="space-y-1">
+            {/* Blog portal */}
             <button
               type="button"
               onClick={() => {
                 navigateToBlog();
-                setMobileMenuOpen(false);
+                setMenuOpen(false);
               }}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 mb-2"
             >
@@ -241,20 +182,23 @@ export const Navbar = () => {
               <span>{isFa ? 'وبلاگ و مقالات تخصصی' : 'Engineering Blog'}</span>
             </button>
 
-            {navLinks.map((link) => {
-              const Icon = link.icon;
-              return (
-                <a
-                  key={link.id}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
-                >
-                  <Icon className="w-4 h-4 text-cyan-400" />
-                  <span>{isFa ? link.labelFa : link.labelEn}</span>
-                </a>
-              );
-            })}
+            {/* Section links */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              {navLinks.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <a
+                    key={link.id}
+                    href={link.href}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                  >
+                    <Icon className="w-4 h-4 text-cyan-400" />
+                    <span>{isFa ? link.labelFa : link.labelEn}</span>
+                  </a>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
