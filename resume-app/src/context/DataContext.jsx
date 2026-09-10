@@ -31,6 +31,7 @@ import {
   triggerSafeDownload,
   generateSecureOtp
 } from '../utils/security';
+import { sendOtpEmail } from '../utils/emailHelper';
 
 const DataContext = createContext(null);
 
@@ -1493,11 +1494,15 @@ export const DataProvider = ({ children }) => {
   // --------------------------------------------------------------------------
 
   /**
-   * Request 6-digit OTP code for Password Reset
+   * Request 6-digit OTP code for Password Reset (REAL email delivery).
+   * The code is generated locally, stored with a 5-minute expiry, and then
+   * actually emailed to the registered recovery address via FormSubmit AJAX.
+   * If delivery fails (network / first-time activation), the code is returned
+   * so the UI can display it as a fallback — the admin is never locked out.
    * @param {string} email - Registered admin recovery email
-   * @returns {{success: boolean, otp?: string, error?: string}}
+   * @returns {Promise<{success: boolean, emailSent?: boolean, needsActivation?: boolean, otp?: string, email?: string, expiresAt?: number, error?: string}>}
    */
-  const requestPasswordResetOtp = (email) => {
+  const requestPasswordResetOtp = async (email) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     if (!validateEmail(cleanEmail)) {
       showToast('لطفاً یک ایمیل معتبر وارد نمایید.', 'error');
@@ -1512,10 +1517,10 @@ export const DataProvider = ({ children }) => {
     otpRateLimiter.recordAttempt();
 
     const registeredEmail = (adminSecurity.recoveryEmail || initialData.personalInfo?.email || '').trim().toLowerCase();
-    
+
     // Check if email matches registered recovery email or contact email
     const isMatchedEmail = cleanEmail === registeredEmail || cleanEmail === (data.personalInfo?.email || '').trim().toLowerCase();
-    
+
     if (!isMatchedEmail) {
       showToast('این ایمیل با ایمیل بازیابی ثبت‌شده در سیستم مطابقت ندارد!', 'error');
       return { success: false, error: 'email_not_found' };
@@ -1531,8 +1536,21 @@ export const DataProvider = ({ children }) => {
       otpExpiresAt: expiresAt,
     }));
 
-    showToast(`کد تایید ۶ رقمی به ایمیل ${cleanEmail} ارسال گردید. (کد تست: ${otp})`, 'info');
-    return { success: true, otp, email: cleanEmail, expiresAt };
+    // Deliver the code by REAL email (async, with timeout + fallback)
+    const delivery = await sendOtpEmail({ to: cleanEmail, otp, purpose: 'reset' });
+
+    if (delivery.sent) {
+      showToast(`کد تایید ۶ رقمی به ایمیل ${cleanEmail} ارسال شد. (۵ دقیقه اعتبار دارد)`);
+      return { success: true, emailSent: true, email: cleanEmail, expiresAt };
+    }
+
+    if (delivery.needsActivation) {
+      showToast('اولین ارسال به این ایمیل نیاز به فعال‌سازی دارد! ایمیل «Activate your form» را در اینباکس یا اسپم خود تایید کنید و دوباره کد بگیرید.', 'error');
+      return { success: true, emailSent: false, needsActivation: true, otp, email: cleanEmail, expiresAt };
+    }
+
+    showToast('ارسال ایمیل ناموفق بود (اختلال شبکه؟)؛ کد تایید پایین فرم نمایش داده شد.', 'error');
+    return { success: true, emailSent: false, otp, email: cleanEmail, expiresAt };
   };
 
   /**
@@ -1602,11 +1620,13 @@ export const DataProvider = ({ children }) => {
   };
 
   /**
-   * Send Email Verification OTP (for First-time setup or changing email)
+   * Send Email Verification OTP (for First-time setup or changing email).
+   * REAL email delivery via FormSubmit AJAX; falls back to on-screen code
+   * if delivery fails so setup is never blocked.
    * @param {string} email - Email to verify
-   * @returns {{success: boolean, otp?: string}}
+   * @returns {Promise<{success: boolean, emailSent?: boolean, needsActivation?: boolean, otp?: string, email?: string}>}
    */
-  const sendEmailVerificationOtp = (email) => {
+  const sendEmailVerificationOtp = async (email) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     if (!validateEmail(cleanEmail)) {
       showToast('لطفاً یک ایمیل معتبر وارد نمایید.', 'error');
@@ -1623,8 +1643,21 @@ export const DataProvider = ({ children }) => {
       otpExpiresAt: expiresAt,
     }));
 
-    showToast(`کد تایید فعال‌سازی به ${cleanEmail} ارسال شد. (کد تست: ${otp})`, 'info');
-    return { success: true, otp, email: cleanEmail };
+    // Deliver the code by REAL email (async, with timeout + fallback)
+    const delivery = await sendOtpEmail({ to: cleanEmail, otp, purpose: 'verify' });
+
+    if (delivery.sent) {
+      showToast(`کد تایید فعال‌سازی به ${cleanEmail} ارسال شد. (۵ دقیقه اعتبار دارد)`);
+      return { success: true, emailSent: true, email: cleanEmail };
+    }
+
+    if (delivery.needsActivation) {
+      showToast('اولین ارسال به این ایمیل نیاز به فعال‌سازی دارد! ایمیل «Activate your form» را در اینباکس یا اسپم خود تایید کنید و دوباره کد بگیرید.', 'error');
+      return { success: true, emailSent: false, needsActivation: true, otp, email: cleanEmail };
+    }
+
+    showToast('ارسال ایمیل ناموفق بود (اختلال شبکه؟)؛ کد تایید پایین فرم نمایش داده شد.', 'error');
+    return { success: true, emailSent: false, otp, email: cleanEmail };
   };
 
   /**

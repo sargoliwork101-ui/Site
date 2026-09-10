@@ -70,6 +70,9 @@ export const AdminLoginModal = () => {
       setUsernameInput('');
       setPassword('');
       setError('');
+      setFallbackOtp('');
+      setOtpNotice('');
+      setIsSendingOtp(false);
       setEmailInput(adminSecurity?.recoveryEmail || data?.personalInfo?.email || '');
     }
   }, [isLoginModalOpen, adminSecurity?.recoveryEmail, data?.personalInfo?.email]);
@@ -375,9 +378,10 @@ export const AdminLoginModal = () => {
 
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl font-bold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
+                  disabled={isSendingOtp}
+                  className={`px-5 py-2.5 rounded-xl font-bold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all shadow-lg flex items-center gap-1.5 ${isSendingOtp ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                 >
-                  <span>{isFa ? 'دریافت کد تایید' : 'Send Reset Code'}</span>
+                  <span>{isSendingOtp ? (isFa ? 'در حال ارسال...' : 'Sending...') : (isFa ? 'دریافت کد تایید' : 'Send Reset Code')}</span>
                   {isFa ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
                 </button>
               </div>
@@ -428,6 +432,28 @@ export const AdminLoginModal = () => {
                 )}
               </div>
 
+              {/* Fallback: shown ONLY when real email delivery failed */}
+              {fallbackOtp && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-center space-y-1.5 animate-fadeIn">
+                  <p className="text-[11px] text-amber-300 leading-relaxed">
+                    {isFa
+                      ? 'ارسال ایمیل ناموفق بود؛ کد تایید شما (۵ دقیقه اعتبار دارد):'
+                      : 'Email delivery failed; your verification code (valid 5 min):'}
+                  </p>
+                  <p className="font-mono text-2xl font-black tracking-[0.35em] text-amber-200 select-all" dir="ltr">
+                    {fallbackOtp}
+                  </p>
+                </div>
+              )}
+
+              {otpNotice === 'activation' && (
+                <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-[11px] text-sky-300 leading-relaxed">
+                  {isFa
+                    ? '💡 اولین ارسال به این ایمیل نیاز به فعال‌سازی دارد: ایمیل «Activate your form» را در اینباکس یا پوشه اسپم تایید کنید، سپس «ارسال مجدد کد» را بزنید.'
+                    : '💡 First-time delivery needs activation: confirm the "Activate your form" email in your inbox/spam, then press Resend.'}
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <button
                   type="button"
@@ -445,9 +471,10 @@ export const AdminLoginModal = () => {
                   <button
                     type="button"
                     onClick={handleForgotEmailSubmit}
-                    className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                    disabled={isSendingOtp}
+                    className={`font-semibold ${isSendingOtp ? 'text-slate-500 cursor-wait' : 'text-cyan-400 hover:text-cyan-300 cursor-pointer'}`}
                   >
-                    {isFa ? 'ارسال مجدد کد' : 'Resend Code'}
+                    {isSendingOtp ? (isFa ? 'در حال ارسال...' : 'Sending...') : (isFa ? 'ارسال مجدد کد' : 'Resend Code')}
                   </button>
                 )}
               </div>

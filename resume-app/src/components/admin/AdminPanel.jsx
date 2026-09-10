@@ -4790,9 +4790,10 @@ export const AdminPanel = () => {
                             <button
                               type="button"
                               onClick={handleSendSecurityOtp}
-                              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors cursor-pointer"
+                              disabled={isSendingSecurityOtp}
+                              className={`px-4 py-2.5 rounded-xl text-xs font-bold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors ${isSendingSecurityOtp ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                             >
-                              ارسال کد تایید (OTP)
+                              {isSendingSecurityOtp ? 'در حال ارسال...' : 'ارسال کد تایید (OTP)'}
                             </button>
                           </div>
                         </div>
