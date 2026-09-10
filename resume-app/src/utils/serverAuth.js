@@ -158,6 +158,19 @@ export const serverConfirmEmailChange = (otp) =>
 export const serverAccount = () =>
   postForm(AUTH_URL, 'account', {});
 
+// --- Notification mailbox (SMTP lives on the server; password never in git) ---
+export const serverSmtpGet = () =>
+  postForm(AUTH_URL, 'smtp-get', {});
+
+export const serverSmtpSave = (cfg) =>
+  postForm(AUTH_URL, 'smtp-save', cfg || {});
+
+export const serverSmtpReveal = () =>
+  postForm(AUTH_URL, 'smtp-reveal', {});
+
+export const serverSmtpTest = () =>
+  postForm(AUTH_URL, 'smtp-test', {});
+
 // --- Contact ------------------------------------------------------------------
 export const serverContact = (payload) =>
   postContact(payload);

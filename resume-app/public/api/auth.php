@@ -397,6 +397,96 @@ switch ($action) {
     break;
   }
 
+  // --- Notification mailbox (SMTP), managed from Panel → Security -----------
+  // Stored in api/data/smtp.json (0600, .htaccess-denied). The password is
+  // NEVER returned except via smtp-reveal (authed admin session only).
+
+  case 'smtp-get': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    $cfg = smtp_get_config();
+    api_json(array('ok' => true, 'smtp' => array(
+      'enabled' => $cfg['enabled'],
+      'host' => $cfg['host'],
+      'port' => $cfg['port'],
+      'encryption' => $cfg['encryption'],
+      'username' => $cfg['username'],
+      'from' => $cfg['from'],
+      'verifyTls' => $cfg['verifyTls'],
+      'hasPassword' => ((string)$cfg['password'] !== ''),
+      'configured' => smtp_configured($cfg),
+    )));
+    break;
+  }
+
+  case 'smtp-save': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    $cfg = smtp_get_config();
+    $host = trim((string)($in['host'] ?? ''));
+    if ($host !== '' && (strlen($host) > 255 || preg_match('/\s/', $host))) api_fail('invalid_host');
+    $port = (int)($in['port'] ?? 587);
+    if ($port < 1 || $port > 65535) api_fail('invalid_port');
+    $enc = (string)($in['encryption'] ?? 'starttls');
+    if (!in_array($enc, array('starttls', 'smtps', 'none'), true)) api_fail('invalid_encryption');
+    $user = trim((string)($in['username'] ?? ''));
+    if (strlen($user) > 128) api_fail('invalid_username');
+    $from = trim((string)($in['from'] ?? ''));
+    if ($from !== '' && !valid_email($from)) api_fail('invalid_from');
+    $cfg['enabled'] = !empty($in['enabled']);
+    $cfg['host'] = $host;
+    $cfg['port'] = $port;
+    $cfg['encryption'] = $enc;
+    $cfg['username'] = $user;
+    $cfg['from'] = $from;
+    $cfg['verifyTls'] = !isset($in['verifyTls']) || !empty($in['verifyTls']);
+    // Empty password = keep the stored one (change-only semantics).
+    if (array_key_exists('password', $in) && (string)$in['password'] !== '') {
+      if (strlen((string)$in['password']) > 256) api_fail('invalid_password');
+      $cfg['password'] = (string)$in['password'];
+    }
+    if (!store_write('smtp', $cfg)) api_fail('save_failed', 500);
+    api_json(array('ok' => true, 'smtp' => array(
+      'enabled' => $cfg['enabled'],
+      'host' => $cfg['host'],
+      'port' => $cfg['port'],
+      'encryption' => $cfg['encryption'],
+      'username' => $cfg['username'],
+      'from' => $cfg['from'],
+      'verifyTls' => $cfg['verifyTls'],
+      'hasPassword' => ((string)$cfg['password'] !== ''),
+      'configured' => smtp_configured($cfg),
+    )));
+    break;
+  }
+
+  case 'smtp-reveal': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    list($allowed, $retry) = rate_limit('smtprev:' . $ip, 10, 600);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    $cfg = smtp_get_config();
+    api_json(array('ok' => true, 'password' => (string)$cfg['password']));
+    break;
+  }
+
+  case 'smtp-test': {
+    if (!sec_is_authed()) api_fail('auth_required', 401);
+    list($allowed, $retry) = rate_limit('smtptest:' . $ip, 3, 600);
+    if (!$allowed) api_fail('rate_limit', 429, array('retryAfter' => $retry));
+    $auth = auth_get();
+    // Fixed recipient (recovery email) — this endpoint must never be a relay.
+    $to = $auth !== null ? (string)$auth['recoveryEmail'] : '';
+    if (!valid_email($to)) api_fail('no_recovery_email');
+    $cfg = smtp_get_config();
+    if (!smtp_configured($cfg)) api_fail('smtp_not_configured');
+    $html = '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;background:#0b0f19;color:#f1f5f9;padding:32px;line-height:2;">'
+      . '<div style="max-width:520px;margin:0 auto;background:#111827;border:1px solid #1e293b;border-radius:16px;padding:28px;text-align:center;">'
+      . '<h2 style="margin:0 0 8px;color:#22d3ee;">✅ اتصال SMTP برقرار است</h2>'
+      . '<p style="color:#94a3b8;font-size:13px;">این یک ایمیل آزمایشی از پنل مدیریت سایت شماست. اعلان‌ها (کد تایید، پیام‌های تماس) از این پس با این صندوق ارسال می‌شوند.</p>'
+      . '</div></div>';
+    list($sent, $err) = smtp_send($to, 'تست اتصال SMTP سایت ✅', $html, 'تست اتصال SMTP موفق بود.', null, $cfg);
+    api_json(array('ok' => true, 'sent' => $sent, 'error' => $sent ? null : $err));
+    break;
+  }
+
   default:
     api_fail('unknown_action', 404);
 }

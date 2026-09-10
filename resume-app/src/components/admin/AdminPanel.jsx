@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { RichTextEditorModal } from '../common/RichTextEditorModal';
 import { TaxonomyManagerModal } from '../common/TaxonomyManagerModal';
 import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
 import { validateUploadFile, sanitizeSvgDataUrl } from '../../utils/security';
+import { serverSmtpGet, serverSmtpSave, serverSmtpReveal, serverSmtpTest } from '../../utils/serverAuth';
 import { TEMPLATES } from '../../data/templates';
 import {
   LayoutDashboard,
@@ -31,6 +32,9 @@ import {
   Star,
   FileSpreadsheet,
   Server,
+  Send,
+  Eye,
+  EyeOff,
   Terminal,
   Globe,
   Sliders,
@@ -176,6 +180,23 @@ export const AdminPanel = () => {
     try { return (getLocalSecQaQuestions?.() || []).length; } catch { return 0; }
   });
   const [isSavingSecQa, setIsSavingSecQa] = useState(false);
+  // Notification mailbox (SMTP) — server-side only; password never in git/localStorage
+  const [smtpForm, setSmtpForm] = useState({
+    enabled: true,
+    host: 'mail.hamedsargoli.ir',
+    port: 587,
+    encryption: 'starttls',
+    username: 'info@hamedsargoli.ir',
+    password: '',
+    from: 'info@hamedsargoli.ir',
+    verifyTls: true,
+  });
+  const [smtpMeta, setSmtpMeta] = useState({ configured: false, hasPassword: false });
+  const [smtpLoading, setSmtpLoading] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState(null);
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const [securityCurrentPw, setSecurityCurrentPw] = useState('');
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [isChangingPw, setIsChangingPw] = useState(false);
@@ -291,6 +312,102 @@ export const AdminPanel = () => {
       }
     } finally {
       setIsSavingSecQa(false);
+    }
+  };
+
+  // Load the server-side SMTP mailbox whenever the Security tab opens.
+  useEffect(() => {
+    if (settingsSubTab !== 'security' || !backend?.available) return;
+    let cancelled = false;
+    setSmtpLoading(true);
+    setSmtpTestResult(null);
+    serverSmtpGet()
+      .then((r) => {
+        if (cancelled || !r?.ok || !r.smtp) return;
+        setSmtpForm((prev) => ({ ...prev, ...r.smtp, password: '' }));
+        setSmtpMeta({ configured: !!r.smtp.configured, hasPassword: !!r.smtp.hasPassword });
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSmtpLoading(false); });
+    return () => { cancelled = true; };
+  }, [settingsSubTab, backend?.available]);
+
+  const smtpSet = (key, value) => {
+    setSmtpForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveSmtp = async () => {
+    if (smtpSaving || !backend?.available) return;
+    setSmtpSaving(true);
+    setSmtpTestResult(null);
+    try {
+      const r = await serverSmtpSave({ ...smtpForm, port: parseInt(smtpForm.port, 10) || 587 });
+      if (r?.ok && r.smtp) {
+        setSmtpForm((prev) => ({ ...prev, ...r.smtp, password: '' }));
+        setSmtpMeta({ configured: !!r.smtp.configured, hasPassword: !!r.smtp.hasPassword });
+        setShowSmtpPassword(false);
+        showToast(r.smtp.configured ? 'صندوق ارسال اعلان‌ها ذخیره و فعال شد ✅' : 'تنظیمات SMTP ذخیره شد (هنوز کامل/فعال نیست).');
+      } else {
+        showToast('ذخیره تنظیمات SMTP ناموفق بود.', 'error');
+      }
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
+  const handleRevealSmtpPassword = async () => {
+    if (!backend?.available) return;
+    if (showSmtpPassword) {
+      setShowSmtpPassword(false);
+      smtpSet('password', '');
+      return;
+    }
+    const r = await serverSmtpReveal();
+    if (r?.ok) {
+      smtpSet('password', r.password || '');
+      setShowSmtpPassword(true);
+      if (!r.password) showToast('هنوز رمزی روی سرور ثبت نشده است.', 'error');
+    } else {
+      showToast('نمایش رمز ممکن نشد (دوباره وارد شوید).', 'error');
+    }
+  };
+
+  const smtpTestErrorFa = (err) => {
+    switch (err) {
+      case 'smtp_connect': return 'اتصال به سرور SMTP برقرار نشد — هاست/پورت را چک کنید (یا فایروال هاست خروجی SMTP را بسته است).';
+      case 'smtp_greet':
+      case 'smtp_ehlo': return 'سرور SMTP پاسخ استاندارد نداد — هاست را بررسی کنید.';
+      case 'smtp_starttls':
+      case 'smtp_tls': return 'خطای TLS/STARTTLS — اگر گواهی هاست معتبر نیست، تیک «بررسی گواهی TLS» را بردارید و دوباره تست کنید.';
+      case 'smtp_auth':
+      case 'smtp_auth_user':
+      case 'smtp_auth_pass': return 'نام کاربری یا رمز SMTP اشتباه است.';
+      case 'smtp_from':
+      case 'smtp_rcpt':
+      case 'smtp_data':
+      case 'smtp_send': return 'سرور پیام آزمایشی را قبول نکرد — آدرس فرستنده/گیرنده را بررسی کنید.';
+      case 'smtp_not_configured': return 'SMTP هنوز کامل پیکربندی نشده (هاست، نام کاربری و رمز لازم است).';
+      case 'no_recovery_email': return 'اول ایمیل بازیابی را در همین تب ثبت و تایید کنید.';
+      case 'rate_limit': return 'تعداد تست زیاد شد — چند دقیقه دیگر تلاش کنید.';
+      default: return 'ارسال ایمیل تست ناموفق بود.';
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    if (smtpTesting || !backend?.available) return;
+    setSmtpTesting(true);
+    setSmtpTestResult(null);
+    try {
+      const r = await serverSmtpTest();
+      if (r?.ok && r.sent) {
+        setSmtpTestResult({ ok: true });
+        showToast('✅ ایمیل تست به ایمیل بازیابی ارسال شد — اینباکس را چک کنید.');
+      } else {
+        setSmtpTestResult({ ok: false, error: r?.error || 'failed' });
+        showToast(smtpTestErrorFa(r?.error), 'error');
+      }
+    } finally {
+      setSmtpTesting(false);
     }
   };
 
@@ -5064,7 +5181,178 @@ export const AdminPanel = () => {
                       </div>
                     </div>
 
-                    {/* 3. FACTORY RESET */}
+                    {/* 3. NOTIFICATION MAILBOX (SMTP, server-side only) */}
+                    <div className="p-6 rounded-3xl bg-slate-950/90 border border-slate-800 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-violet-500/20 text-violet-400 border border-violet-500/30">
+                            <Server className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm sm:text-base font-bold text-white">
+                              صندوق ارسال اعلان‌ها (ایمیل + رمز SMTP)
+                            </h4>
+                            <p className="text-xs text-slate-400">
+                              کدهای تایید و پیام‌های تماس با این صندوق ارسال می‌شوند. رمز فقط روی سرور می‌ماند (فایل 0600) و هیچ‌وقت داخل گیت یا مرورگر ذخیره نمی‌شود.
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-xs font-bold px-3 py-1 rounded-full border whitespace-nowrap ${
+                            smtpMeta.configured
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+                          }`}
+                        >
+                          {smtpLoading ? '⏳ در حال بارگذاری...' : (smtpMeta.configured ? '✅ فعال و پیکربندی‌شده' : '⚪ غیرفعال / ناقص')}
+                        </span>
+                      </div>
+
+                      {!backend?.available ? (
+                        <p className="text-xs text-sky-300 leading-relaxed">
+                          🖥️ حالت محلی است — تنظیمات SMTP فقط در حالت امن (روی هاست با PHP) کار می‌کند.
+                        </p>
+                      ) : (
+                        <>
+                          <label className="flex items-center gap-2 text-xs font-bold text-white cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!smtpForm.enabled}
+                              onChange={(e) => smtpSet('enabled', e.target.checked)}
+                              className="w-4 h-4 accent-violet-500"
+                            />
+                            ارسال اعلان‌ها با این صندوق فعال باشد (در غیر این صورت از mail خود هاست استفاده می‌شود)
+                          </label>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-bold text-white mb-1">هاست SMTP:</label>
+                              <input
+                                type="text"
+                                dir="ltr"
+                                value={smtpForm.host}
+                                onChange={(e) => smtpSet('host', e.target.value)}
+                                placeholder="mail.yourdomain.ir"
+                                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-violet-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-white mb-1">پورت:</label>
+                              <input
+                                type="number"
+                                dir="ltr"
+                                value={smtpForm.port}
+                                onChange={(e) => smtpSet('port', e.target.value)}
+                                placeholder="587"
+                                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-violet-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-white mb-1">رمزنگاری:</label>
+                              <select
+                                value={smtpForm.encryption}
+                                onChange={(e) => smtpSet('encryption', e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-violet-500"
+                              >
+                                <option value="starttls">STARTTLS (پیشنهاد — ۵۸۷)</option>
+                                <option value="smtps">SMTPS (۴۶۵)</option>
+                                <option value="none">بدون رمزنگاری (۲۵ — ناامن)</option>
+                              </select>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-bold text-white mb-1">نام کاربری (ایمیل صندوق):</label>
+                              <input
+                                type="text"
+                                dir="ltr"
+                                value={smtpForm.username}
+                                onChange={(e) => smtpSet('username', e.target.value)}
+                                placeholder="info@yourdomain.ir"
+                                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-violet-500"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-bold text-white mb-1">
+                                رمز صندوق{smtpMeta.hasPassword ? ' (ثبت شده ✅ — خالی = بدون تغییر)' : ' (هنوز ثبت نشده)'}:
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={showSmtpPassword ? 'text' : 'password'}
+                                  dir="ltr"
+                                  value={smtpForm.password}
+                                  onChange={(e) => smtpSet('password', e.target.value)}
+                                  placeholder={smtpMeta.hasPassword ? '•••••••• (خالی بگذارید تا عوض نشود)' : 'رمز ایمیل را وارد کنید...'}
+                                  autoComplete="new-password"
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-violet-500 ltr:pr-10 rtl:pl-10"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleRevealSmtpPassword}
+                                  title={showSmtpPassword ? 'پنهان کردن' : 'نمایش رمز فعلی'}
+                                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-violet-300 cursor-pointer"
+                                >
+                                  {showSmtpPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-bold text-white mb-1">آدرس فرستنده (خالی = همان نام کاربری):</label>
+                              <input
+                                type="text"
+                                dir="ltr"
+                                value={smtpForm.from}
+                                onChange={(e) => smtpSet('from', e.target.value)}
+                                placeholder="info@yourdomain.ir"
+                                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white font-mono focus:outline-none focus:border-violet-500"
+                              />
+                            </div>
+                            <div className="sm:col-span-2 flex items-end">
+                              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pb-2">
+                                <input
+                                  type="checkbox"
+                                  checked={!!smtpForm.verifyTls}
+                                  onChange={(e) => smtpSet('verifyTls', e.target.checked)}
+                                  className="w-4 h-4 accent-violet-500"
+                                />
+                                بررسی گواهی TLS سرور (اگر تست با خطای TLS شکست خورد، خاموش کنید)
+                              </label>
+                            </div>
+                          </div>
+
+                          {smtpTestResult && !smtpTestResult.ok && (
+                            <p className="text-xs text-rose-300 leading-relaxed">
+                              ❌ {smtpTestErrorFa(smtpTestResult.error)}
+                            </p>
+                          )}
+                          {smtpTestResult?.ok && (
+                            <p className="text-xs text-emerald-300 leading-relaxed">
+                              ✅ ایمیل تست ارسال شد — اینباکس ایمیل بازیابی ({serverAccountInfo?.recoveryEmail || adminSecurity?.recoveryEmail || '…'}) را چک کنید (پوشه اسپم هم نگاه کنید).
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={handleSaveSmtp}
+                              disabled={smtpSaving || smtpLoading}
+                              className="px-5 py-2.5 rounded-xl text-xs font-bold bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border border-violet-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+                            >
+                              {smtpSaving ? '⏳ در حال ذخیره...' : '💾 ذخیره صندوق SMTP'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleTestSmtp}
+                              disabled={smtpTesting || smtpLoading}
+                              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/50 transition-colors disabled:opacity-50 cursor-pointer"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              {smtpTesting ? '⏳ در حال ارسال تست...' : 'ارسال ایمیل تست'}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* 4. FACTORY RESET */}
                     <div className="p-6 rounded-3xl bg-rose-950/20 border border-rose-500/30 space-y-3">
                       <h4 className="text-sm font-bold text-rose-300 flex items-center gap-2">
                         <RefreshCw className="w-4 h-4 text-rose-400" />
