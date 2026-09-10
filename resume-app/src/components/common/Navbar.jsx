@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import {
-  FileDown,
   Globe,
   Menu,
   X,
@@ -20,7 +19,6 @@ export const Navbar = () => {
   const {
     data,
     currentTemplate,
-    setIsPdfModalOpen,
     setIsLoginModalOpen,
     setIsAdminOpen,
     setIsSearchModalOpen,
@@ -62,11 +60,6 @@ export const Navbar = () => {
     } else {
       setIsLoginModalOpen(true);
     }
-  };
-
-  const handleLanguageClick = () => {
-    setMenuOpen(false);
-    toggleLanguage();
   };
 
   return (
@@ -112,62 +105,51 @@ export const Navbar = () => {
           </div>
         </a>
 
-        {/* Menu Toggle (all screen sizes) */}
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          className="w-10 h-10 grid place-items-center rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/50 transition-colors shrink-0"
-          aria-label={isFa ? 'باز و بسته کردن منو' : 'Toggle navigation menu'}
-          title={isFa ? 'منوی سایت' : 'Site menu'}
-        >
-          {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        {/* Quick icons + menu toggle (all screen sizes) */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsSearchModalOpen(true)}
+            className="w-10 h-10 grid place-items-center rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/50 transition-colors"
+            aria-label={isFa ? 'جستجوی سایت' : 'Search site'}
+            title={isFa ? 'جستجوی سایت' : 'Search site'}
+          >
+            <Search className="w-5 h-5 text-cyan-400" />
+          </button>
+          <button
+            onClick={toggleLanguage}
+            className="w-10 h-10 grid place-items-center rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/50 transition-colors"
+            aria-label={isFa ? 'English version' : 'نسخه فارسی'}
+            title={isFa ? 'English version' : 'نسخه فارسی'}
+          >
+            <Globe className="w-5 h-5 text-sky-400" />
+          </button>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="w-10 h-10 grid place-items-center rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/50 transition-colors"
+            aria-label={isFa ? 'باز و بسته کردن منو' : 'Toggle navigation menu'}
+            title={isFa ? 'منوی سایت' : 'Site menu'}
+          >
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Dropdown Menu (all screen sizes) */}
       {menuOpen && (
         <div className="bg-slate-900/95 backdrop-blur-2xl border-b border-slate-800 mt-3 animate-fadeIn">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-6 space-y-2">
-            {/* Quick actions */}
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 mb-3">
-              <button
-                onClick={() => {
-                  setIsSearchModalOpen(true);
-                  setMenuOpen(false);
-                }}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
-              >
-                <Search className="w-4 h-4 text-cyan-400" />
-                <span>{isFa ? 'جستجوی سایت' : 'Search Site'}</span>
-              </button>
-              <button
-                onClick={() => {
-                  setIsPdfModalOpen(true);
-                  setMenuOpen(false);
-                }}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
-              >
-                <FileDown className="w-4 h-4 text-emerald-400" />
-                <span>{isFa ? 'دانلود PDF رزومه' : 'PDF Resume'}</span>
-              </button>
-              <button
-                onClick={handleAdminClick}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold border ${
-                  isAuthenticated
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
-                    : 'bg-slate-800 text-amber-300 hover:bg-slate-700 border-amber-500/40'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                <span>{isFa ? 'پنل مدیریت' : 'Admin Panel'}</span>
-              </button>
-              <button
-                onClick={handleLanguageClick}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
-              >
-                <Globe className="w-3.5 h-3.5 text-sky-400" />
-                <span>{isFa ? 'English version' : 'نسخه فارسی'}</span>
-              </button>
-            </div>
+            {/* Quick action: admin panel (search + language live in the top bar now) */}
+            <button
+              onClick={handleAdminClick}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold border mb-3 ${
+                isAuthenticated
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                  : 'bg-slate-800 text-amber-300 hover:bg-slate-700 border-amber-500/40'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <span>{isFa ? 'پنل مدیریت' : 'Admin Panel'}</span>
+            </button>
 
             {/* Blog portal */}
             <button
