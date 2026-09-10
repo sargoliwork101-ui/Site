@@ -1565,6 +1565,22 @@ export const DataProvider = ({ children }) => {
   const isDefaultPassword = backend.available ? !backend.setupDone : localPwIsDefault;
 
   // One-time hardening on boot:
+  // Blocked-storage warning — ADMINS ONLY (once per tab). A visitor who
+  // never saves anything must never be nagged: viewing pulls content from
+  // the server and needs no local persistence. Only someone who LOGS IN
+  // (and therefore needs edits/login to survive) is told this browser will
+  // forget everything at tab close.
+  const storageWarnedRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated || storageWarnedRef.current) return;
+    try {
+      if (isPersistentStorageBlocked()) {
+        storageWarnedRef.current = true;
+        showToast('این مرورگر ذخیره‌سازی محلی را مسدود کرده؛ تغییرات فقط تا بستن تب حفظ می‌شود و بین دستگاه‌ها سینک نمی‌شود. برای حالت عادی، کوکی‌ها/ذخیره‌سازی سایت را مجاز کنید.', 'warning');
+      }
+    } catch (e) { /* toast is best-effort */ }
+  }, [isAuthenticated]);
+
   //  1. Probe the real backend (if any) and sync the session mirror.
   //  2. Delete legacy PERSISTENT auth flags (a clean re-login is required once).
   //  3. Hash every plaintext local password (PBKDF2) and blank legacy copies.
@@ -1574,11 +1590,6 @@ export const DataProvider = ({ children }) => {
       storage.remove(CURRENT_USER_KEY);
       storage.remove(ADMIN_PASSWORD_KEY);
     } catch (e) { /* ignore */ }
-    try {
-      if (isPersistentStorageBlocked()) {
-        showToast('این مرورگر ذخیره‌سازی محلی را مسدود کرده؛ تغییرات فقط تا بستن تب حفظ می‌شود و بین دستگاه‌ها سینک نمی‌شود. برای حالت عادی، کوکی‌ها/ذخیره‌سازی سایت را مجاز کنید.', 'warning');
-      }
-    } catch (e) { /* toast is best-effort */ }
     refreshBackend();
     (async () => {
       try {
