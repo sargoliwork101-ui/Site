@@ -226,18 +226,6 @@ export const AdminPanel = () => {
   const [serverLoading, setServerLoading] = useState(false);
   const [serverBusy, setServerBusy] = useState('');
 
-  useEffect(() => {
-    if (settingsSubTab !== 'backup') return;
-    try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
-    refreshServerBackups();
-    const t = setInterval(() => {
-      setBackupTick((x) => x + 1);
-      try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
-    }, 30000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsSubTab]);
-
   const refreshServerBackups = async () => {
     if (!backend?.available) {
       setServerBackups([]);
@@ -513,6 +501,21 @@ export const AdminPanel = () => {
       .finally(() => { if (!cancelled) setSmtpLoading(false); });
     return () => { cancelled = true; };
   }, [settingsSubTab, backend?.available]);
+
+  // Backup tab: storage meter + 30s ticker + host-backup list refresh.
+  // NOTE: this effect must stay BELOW the settingsSubTab declaration —
+  // the deps array is evaluated during render (TDZ crash otherwise).
+  useEffect(() => {
+    if (settingsSubTab !== 'backup') return;
+    try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
+    refreshServerBackups();
+    const t = setInterval(() => {
+      setBackupTick((x) => x + 1);
+      try { setStorageUsage(getStorageUsage()); } catch { /* ignore */ }
+    }, 30000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsSubTab]);
 
   const smtpSet = (key, value) => {
     setSmtpForm((prev) => ({ ...prev, [key]: value }));
