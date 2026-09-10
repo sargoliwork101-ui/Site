@@ -865,6 +865,18 @@ export const DataProvider = ({ children }) => {
     showToast('تنظیمات سئو، متاتگ‌ها و ربات‌ها به‌روزرسانی شد.');
   };
 
+  // Home page content (hero headline / subtitle / intro) — like the site's «ویرایش محتوا»
+  const updateHome = (newHome) => {
+    setData((prev) => ({
+      ...prev,
+      home: {
+        ...(prev.home || initialData.home),
+        ...newHome,
+      },
+    }));
+    showToast('محتوای صفحه اصلی با موفقیت ذخیره شد.');
+  };
+
   // --------------------------------------------------------------------------
   // 7. MEDIA LIBRARY & UPLOADS
   // --------------------------------------------------------------------------
@@ -1980,6 +1992,9 @@ export const DataProvider = ({ children }) => {
         setCurrentView,
         navigateToBlog,
         navigateToPortfolio,
+        route,
+        setRoute,
+        navigate,
         dialogState,
         setDialogState,
         closeDialog,
