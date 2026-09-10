@@ -1539,7 +1539,7 @@ export const AdminPanel = () => {
 
             {/* 4. PERSONAL INFO TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
             {activeTab === 'personal' && (
-              <form onSubmit={handlePersonalSubmit} className="space-y-6 max-w-4xl">
+              <form onSubmit={handlePersonalSubmit} className="space-y-6 max-w-none">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div>
                     <h4 className="text-base font-bold text-white flex items-center gap-2">
@@ -4129,7 +4129,7 @@ export const AdminPanel = () => {
 
                         {/* 10. UNIFIED MASTER SETTINGS & SYSTEM CONFIGURATION TAB */}
             {activeTab === 'settings' && (
-              <div className={`space-y-6 ${settingsSubTab === 'users' ? 'max-w-none' : 'max-w-5xl'}`}>
+              <div className="space-y-6 max-w-none">
                 {/* Master Settings Sub-navigation Bar */}
                 <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-950/90 border border-slate-800 overflow-x-auto shadow-lg">
                   {[
@@ -4184,6 +4184,8 @@ export const AdminPanel = () => {
                       </button>
                     </div>
 
+                    {/* Boards + Articles config side-by-side on xl */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                     {/* Hardware Boards Display Configuration */}
                     <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
@@ -4310,6 +4312,7 @@ export const AdminPanel = () => {
                           </p>
                         </div>
                       </div>
+                    </div>
                     </div>
 
                     <div className="flex items-center justify-end pt-2">
