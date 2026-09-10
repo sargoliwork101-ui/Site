@@ -362,6 +362,25 @@ export const AdminPanel = () => {
     });
   };
 
+  const handleSnapshotDownload = (snap) => {
+    try {
+      const payload = snap.data ?? snap;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date(snap.timestamp || Date.now());
+      const f = (n) => String(n).padStart(2, '0');
+      a.href = url;
+      a.download = `snapshot-${stamp.getFullYear()}${f(stamp.getMonth() + 1)}${f(stamp.getDate())}-${f(stamp.getHours())}${f(stamp.getMinutes())}.json`;
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast(`«${snap.name}» دانلود شد — از بخش «بازگردانی» می‌توانی برگردانیش.`);
+    } catch {
+      showToast('دانلود نسخه ناموفق بود.', 'error');
+    }
+  };
+
   const faFileSize = (bytes) => {
     const b = bytes || 0;
     if (b < 1024) return `${b} B`;
@@ -5215,6 +5234,15 @@ export const AdminPanel = () => {
                               >
                                 <RotateCcw className="w-3.5 h-3.5" />
                                 <span>بازگردانی</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSnapshotDownload(snap)}
+                                title="دانلود این نسخه"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>دانلود</span>
                               </button>
                               <button
                                 type="button"
