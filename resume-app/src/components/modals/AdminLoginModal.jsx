@@ -35,6 +35,7 @@ export const AdminLoginModal = () => {
   const {
     isLoginModalOpen,
     setIsLoginModalOpen,
+    setIsAdminOpen,
     loginUser,
     requestPasswordResetOtp,
     verifyPasswordResetOtp,
@@ -156,6 +157,16 @@ export const AdminLoginModal = () => {
           setError('');
           return;
         }
+        if (result.error === 'insecure_context') {
+          // Password was NOT checked — the browser simply refuses WebCrypto
+          // on this origin. Never disguise it as 'wrong password'.
+          setError(
+            isFa
+              ? 'اتصال امن نیست: مرورگر روی این آدرس WebCrypto نمی‌دهد. با HTTPS یا لوکال‌هاست وارد شوید.'
+              : 'Insecure context: no WebCrypto on this origin. Use HTTPS or localhost.'
+          );
+          return;
+        }
         setError(
           isFa
             ? 'نام کاربری یا رمز عبور وارد شده نادرست است.'
@@ -165,6 +176,9 @@ export const AdminLoginModal = () => {
         setCooldownSeconds(remaining);
       } else {
         setError('');
+        // Explicit transition (defense in depth — applyLocalAuth does this too).
+        setIsLoginModalOpen(false);
+        setIsAdminOpen(true);
       }
     } finally {
       setIsBusy(false);

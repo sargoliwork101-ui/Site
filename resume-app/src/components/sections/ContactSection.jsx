@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useData } from '../../context/DataContext';
 import { formatNum, toEnglishDigits, toPersianDigits } from '../../utils/numberHelper';
 import {
@@ -13,11 +13,24 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Download,
-  AlertCircle
+  AlertCircle,
+  Paperclip,
+  Upload,
+  X
 } from 'lucide-react';
 import { Github, Linkedin } from '../common/BrandIcons';
 import { sanitizeText, validateEmail, contactRateLimiter, triggerSafeDownload } from '../../utils/security';
-import { serverContact } from '../../utils/serverAuth';
+import { serverContact, serverUploadAttachment } from '../../utils/serverAuth';
+
+const MAX_FILE_BYTES = 20971520; // 20MB
+const ALLOWED_FILE_EXT = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','md','jpg','jpeg','png','gif','webp','zip','rar','7z'];
+
+const readFileAsDataURL = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(new Error('read_failed'));
+  reader.readAsDataURL(file);
+});
 
 export const ContactSection = () => {
   const { data, currentTemplate, addMessage, showToast, adminSecurity, backend } = useData();
@@ -31,13 +44,44 @@ export const ContactSection = () => {
     company: '',
     subject: isFa ? 'طراحی برد جدید (PCB Design)' : 'New Hardware PCB Project',
     message: '',
+    phone: '', // optional
     website_bot_trap: '', // Invisible honeypot
   });
+  const [attachment, setAttachment] = useState(null); // optional File (<20MB)
+  const fileInputRef = useRef(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleFileSelect = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      showToast(
+        isFa ? 'حجم فایل باید کمتر از ۲۰ مگابایت باشد.' : 'File must be smaller than 20MB.',
+        'error'
+      );
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!ALLOWED_FILE_EXT.includes(ext)) {
+      showToast(
+        isFa ? 'فرمت این فایل پشتیبانی نمی‌شود.' : 'This file type is not supported.',
+        'error'
+      );
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setAttachment(file);
+  };
+
+  const removeAttachment = () => {
+    setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // 1. Honeypot check for spambots
@@ -82,8 +126,53 @@ export const ContactSection = () => {
       return;
     }
 
+    // Optional phone: accept Persian digits too, keep it light.
+    const cleanPhone = toEnglishDigits((formData.phone || '').trim());
+    if (cleanPhone !== '') {
+      const phoneDigits = cleanPhone.replace(/\D/g, '');
+      if (!/^[+0-9][0-9\s\-().]*$/.test(cleanPhone) || phoneDigits.length < 7 || phoneDigits.length > 15) {
+        showToast(
+          isFa ? 'شماره تلفن وارد شده معتبر نیست.' : 'The phone number entered is invalid.',
+          'error'
+        );
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     contactRateLimiter.recordAttempt();
+
+    // Optional attachment: upload FIRST so the message stores its URL.
+    // With a backend -> real file URL; without -> tiny files embedded, else metadata only.
+    let attachmentUrl = '';
+    let attachmentInline = '';
+    if (attachment) {
+      if (backend?.available) {
+        try {
+          const up = await serverUploadAttachment(attachment);
+          if (up && up.ok) {
+            attachmentUrl = up.url;
+          } else {
+            showToast(
+              isFa ? 'آپلود فایل ناموفق بود؛ پیام بدون فایل پیوست ثبت می‌شود.' : 'File upload failed; the message will be saved without the file.',
+              'warning'
+            );
+          }
+        } catch (err) {
+          showToast(
+            isFa ? 'آپلود فایل ناموفق بود؛ پیام بدون فایل پیوست ثبت می‌شود.' : 'File upload failed; the message will be saved without the file.',
+            'warning'
+          );
+        }
+      } else if (attachment.size <= 1048576) {
+        try {
+          attachmentInline = await readFileAsDataURL(attachment);
+        } catch (err) { /* metadata-only fallback below */ }
+      }
+    }
+    const attachmentMeta = attachment
+      ? { name: attachment.name, size: attachment.size, url: attachmentUrl, inline: attachmentInline }
+      : null;
 
     const recipientEmail = adminSecurity?.recoveryEmail || data.personalInfo?.email || 'arash.taheri.hardware@gmail.com';
 
@@ -92,8 +181,10 @@ export const ContactSection = () => {
       name: cleanName,
       email: cleanEmail,
       company: cleanCompany,
+      phone: cleanPhone,
       subject: cleanSubject,
       message: cleanMessage,
+      attachment: attachmentMeta,
     });
 
     // 2. Email the admin: prefer OUR OWN server (private + reliable),
@@ -106,8 +197,11 @@ export const ContactSection = () => {
             name: cleanName,
             email: cleanEmail,
             company: cleanCompany,
+            phone: cleanPhone,
             subject: cleanSubject,
             message: cleanMessage,
+            attachmentUrl,
+            attachmentName: attachment ? attachment.name : '',
             website_bot_trap: '',
           });
           if (r && r.ok) return; // delivered by our own host
@@ -127,9 +221,11 @@ export const ContactSection = () => {
             _subject: `⚡ پیام جدید از سایت پورتفولیو: ${cleanSubject}`,
             'نام فرستنده': cleanName,
             'ایمیل فرستنده': cleanEmail,
+            'تلفن فرستنده': cleanPhone || '—',
             'سازمان / شرکت': cleanCompany || 'شخصی',
             'موضوع': cleanSubject,
             'متن پیام': cleanMessage,
+            'فایل پیوست': attachment ? `${attachment.name} (${Math.ceil(attachment.size / 1024)} KB)` : '—',
             _template: 'table',
             _captcha: 'false',
           }),
@@ -160,8 +256,11 @@ export const ContactSection = () => {
         company: '',
         subject: isFa ? 'طراحی برد جدید (PCB Design)' : 'New Hardware PCB Project',
         message: '',
+        phone: '',
         website_bot_trap: '',
       });
+      setAttachment(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }, 400);
   };
 
@@ -434,6 +533,57 @@ END:VCARD`;
                       }
                       className="w-full px-4 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative">
+                      <Phone className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none start-3" />
+                      <input
+                        type="tel"
+                        dir="ltr"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder={isFa ? 'تلفن (اختیاری)' : 'Phone (optional)'}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 ps-10 text-white placeholder-slate-500 outline-none focus:border-cyan-400/50 transition-colors text-left"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        onChange={handleFileSelect}
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z"
+                        className="hidden"
+                      />
+                      {!attachment ? (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                          className="w-full flex items-center justify-center gap-2 bg-white/5 border border-dashed border-white/15 rounded-xl px-4 py-3 text-slate-400 hover:text-cyan-300 hover:border-cyan-400/40 transition-colors text-sm"
+                        >
+                          <Paperclip className="w-4 h-4" />
+                          <span>{isFa ? 'پیوست فایل (اختیاری، حداکثر ۲۰ مگ)' : 'Attach file (optional, max 20MB)'}</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-cyan-400/10 border border-cyan-400/30 rounded-xl px-3 py-2.5 text-sm">
+                          <Upload className="w-4 h-4 text-cyan-300 shrink-0" />
+                          <span className="text-cyan-100 truncate flex-1" dir="ltr">{attachment.name}</span>
+                          <span className="text-slate-400 text-xs shrink-0" dir="ltr">
+                            {attachment.size > 1048576
+                              ? `${(attachment.size / 1048576).toFixed(1)} MB`
+                              : `${Math.max(1, Math.ceil(attachment.size / 1024))} KB`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={removeAttachment}
+                            className="text-slate-400 hover:text-red-400 transition-colors shrink-0"
+                            aria-label={isFa ? 'حذف فایل' : 'Remove file'}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <button

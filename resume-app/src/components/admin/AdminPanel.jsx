@@ -1271,13 +1271,15 @@ export const AdminPanel = () => {
       showToast('پیامی در صندوق موجود نیست.', 'info');
       return;
     }
-    const headers = ['نام', 'ایمیل', 'شرکت', 'موضوع', 'تاریخ', 'متن پیام'];
+    const headers = ['نام', 'ایمیل', 'تلفن', 'شرکت', 'موضوع', 'تاریخ', 'فایل پیوست', 'متن پیام'];
     const rows = messages.map((m) => [
       `"${m.name}"`,
       `"${m.email}"`,
+      `"${m.phone || ''}"`,
       `"${m.company || ''}"`,
       `"${m.subject}"`,
       `"${m.date}"`,
+      `"${m.attachment ? (m.attachment.name || '') : ''}"`,
       `"${m.message.replace(/"/g, '""')}"`,
     ]);
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -4155,6 +4157,15 @@ export const AdminPanel = () => {
                                 {msg.company}
                               </span>
                             )}
+                            {msg.phone && (
+                              <a
+                                href={`tel:${(msg.phone || '').replace(/[^+0-9]/g, '')}`}
+                                dir="ltr"
+                                className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono hover:bg-emerald-500/25 transition-colors"
+                              >
+                                {msg.phone}
+                              </a>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 text-xs">
@@ -4178,6 +4189,25 @@ export const AdminPanel = () => {
                         <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
                           {msg.message}
                         </p>
+                        {msg.attachment && (msg.attachment.url || msg.attachment.inline) && (
+                          <a
+                            href={msg.attachment.url || msg.attachment.inline}
+                            download={msg.attachment.name || true}
+                            target={msg.attachment.url ? '_blank' : undefined}
+                            rel="noreferrer"
+                            className="mt-2 flex items-center gap-2 text-[11px] font-bold text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-3 py-2 hover:bg-cyan-500/20 transition-colors w-fit max-w-full"
+                          >
+                            <FileDown className="w-4 h-4 shrink-0" />
+                            <span className="truncate" dir="ltr">{msg.attachment.name}</span>
+                            {msg.attachment.size > 0 && (
+                              <span className="text-slate-400 font-mono shrink-0" dir="ltr">
+                                ({msg.attachment.size > 1048576
+                                  ? `${(msg.attachment.size / 1048576).toFixed(1)} MB`
+                                  : `${Math.max(1, Math.ceil(msg.attachment.size / 1024))} KB`})
+                              </span>
+                            )}
+                          </a>
+                        )}
 
                         <div className="pt-2 flex justify-end gap-2">
                           <button

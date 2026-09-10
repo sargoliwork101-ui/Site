@@ -30,7 +30,8 @@ import {
   triggerSafeDownload,
   hashPasswordLocal,
   verifyPasswordLocal,
-  isLocalPasswordHash
+  isLocalPasswordHash,
+  hasWebCrypto
 } from '../utils/security';
 import {
   fetchServerStatus,
@@ -1264,12 +1265,27 @@ export const DataProvider = ({ children }) => {
 
     contactRateLimiter.recordAttempt();
 
+    // Attachment is validated field-by-field: primitives only, capped lengths.
+    let attachment = null;
+    const a = msgData.attachment;
+    if (a && typeof a === 'object' && typeof a.name === 'string' && a.name) {
+      attachment = {
+        name: sanitizeText(a.name).slice(0, 150),
+        size: Math.max(0, Math.floor(Number(a.size) || 0)),
+        url: typeof a.url === 'string' ? a.url.slice(0, 300) : '',
+        inline: typeof a.inline === 'string' && a.inline.startsWith('data:') ? a.inline.slice(0, 1500000) : '',
+      };
+    }
+
     const newMsg = {
       id: `msg-${Date.now()}`,
       name: sanitizeText(msgData.name),
       email: sanitizeText(msgData.email),
+      company: sanitizeText(msgData.company || ''),
+      phone: sanitizeText(msgData.phone || '').slice(0, 30),
       subject: sanitizeText(msgData.subject || 'پیام مستقیم از وب‌سایت'),
       message: sanitizeText(msgData.message),
+      attachment,
       date: new Date().toLocaleDateString('fa-IR', {
         year: 'numeric',
         month: 'long',
@@ -1433,7 +1449,7 @@ export const DataProvider = ({ children }) => {
         const current = users || [];
         let changed = false;
         const nextUsers = await Promise.all(current.map(async (u) => {
-          if (u && typeof u.password === 'string' && u.password !== '' && !isLocalPasswordHash(u.password)) {
+          if (u && typeof u.password === 'string' && u.password !== '' && !isLocalPasswordHash(u.password) && !u.password.startsWith('simple$')) {
             changed = true;
             return { ...u, password: await hashPasswordLocal(u.password) };
           }
@@ -1445,7 +1461,7 @@ export const DataProvider = ({ children }) => {
             // Fold legacy master password into the admin user if still plaintext there.
             hashPasswordLocal(prev.password).then((h) => {
               setUsers((list) => (list || []).map((u) => (
-                u.username === 'admin' && !isLocalPasswordHash(u.password) ? { ...u, password: h } : u
+                u.username === 'admin' && !isLocalPasswordHash(u.password) && !(u.password || '').startsWith('simple$') ? { ...u, password: h } : u
               )));
             }).catch(() => {});
             return { ...prev, password: '' };
@@ -1525,6 +1541,13 @@ export const DataProvider = ({ children }) => {
     if (targetUser.status !== 'active') {
       showToast('این حساب کاربری غیرفعال شده است. لطفاً با مدیر ارشد تماس بگیرید.', 'error');
       return { success: false, error: 'user_inactive' };
+    }
+
+    // PBKDF2 hashes cannot verify without WebCrypto (plain-HTTP origin).
+    // Say so HONESTLY instead of a misleading 'wrong password'.
+    if (isLocalPasswordHash(targetUser.password) && !hasWebCrypto()) {
+      showToast('اتصال امن نیست: این مرورگر روی آدرس فعلی WebCrypto ارائه نمی‌دهد. با HTTPS یا لوکال‌هاست وارد شوید.', 'error');
+      return { success: false, error: 'insecure_context' };
     }
 
     // PBKDF2 verify (transparently accepts legacy plaintext once, then migrates)

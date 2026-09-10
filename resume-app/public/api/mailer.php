@@ -274,7 +274,23 @@ function send_otp_mail($to, $code, $purpose = 'reset') {
 }
 
 /** Contact-form message forwarded to the admin. */
-function send_contact_mail($to, $name, $email, $company, $subject, $message) {
+function contact_attachment_row($attachmentUrl, $attachmentName, $esc) {
+  if ($attachmentUrl === '') return '';
+  $label = $attachmentName !== '' ? $attachmentName : $attachmentUrl;
+  $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+  $host = preg_replace('/[^a-zA-Z0-9.\-:]/', '', (string)($_SERVER['HTTP_HOST'] ?? ''));
+  $scriptDir = str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/api/contact.php')));
+  $root = rtrim(dirname($scriptDir), '/');
+  $href = ($host !== '' ? $scheme . '://' . $host . $root . '/' : '') . $attachmentUrl;
+  $cell = $host !== ''
+    ? '<a href="' . $esc($href) . '" style="color:#22d3ee;">' . $esc($label) . '</a>'
+      . '<div style="color:#64748b;font-size:11px;">(یا از صندوق پیام‌های پنل دانلود کنید)</div>'
+    : $esc($label) . ' (دانلود از صندوق پیام‌های پنل)';
+  return '<tr><td style="padding:8px 12px;color:#94a3b8;font-size:13px;white-space:nowrap;">فایل پیوست</td>'
+    . '<td style="padding:8px 12px;color:#f1f5f9;font-size:13px;">' . $cell . '</td></tr>';
+}
+
+function send_contact_mail($to, $name, $email, $company, $subject, $message, $phone = '', $attachmentUrl = '', $attachmentName = '') {
   $esc = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
   $subjectLine = '⚡ پیام جدید از سایت: ' . $subject;
 
@@ -289,16 +305,23 @@ function send_contact_mail($to, $name, $email, $company, $subject, $message) {
     . '<table style="width:100%;border-collapse:collapse;">'
     . $row('نام فرستنده', $name)
     . $row('ایمیل فرستنده', $email)
+    . $row('تلفن فرستنده', ($phone !== '' ? $phone : '—'))
     . $row('سازمان / شرکت', ($company !== '' ? $company : 'شخصی'))
     . $row('موضوع', $subject)
     . $row('متن پیام', $message)
+    . contact_attachment_row($attachmentUrl, $attachmentName, $esc)
     . '</table></div></div>';
 
   $text = 'پیام جدید از فرم تماس سایت' . "\n\n"
     . 'نام: ' . $name . "\n"
     . 'ایمیل: ' . $email . "\n"
+    . 'تلفن: ' . ($phone !== '' ? $phone : '—') . "\n"
     . 'شرکت: ' . ($company !== '' ? $company : 'شخصی') . "\n"
     . 'موضوع: ' . $subject . "\n\n" . $message;
+  if ($attachmentUrl !== '') {
+    $text .= "\n\n" . 'فایل پیوست: ' . ($attachmentName !== '' ? $attachmentName : $attachmentUrl)
+      . ' — دانلود از صندوق پیام‌های پنل مدیریت';
+  }
 
   return send_html_mail($to, $subjectLine, $html, $text, $email);
 }

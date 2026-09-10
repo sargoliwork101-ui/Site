@@ -19,6 +19,7 @@
 
 const AUTH_URL = 'api/auth.php';
 const CONTACT_URL = 'api/contact.php';
+const UPLOAD_URL = 'api/upload.php';
 const REQUEST_TIMEOUT_MS = 20000;
 
 async function postForm(url, action, body = {}) {
@@ -191,5 +192,37 @@ export const serverBackupConfigSave = (keep) =>
   postForm(AUTH_URL, 'backup-config-save', { keep });
 
 // --- Contact ------------------------------------------------------------------
+/**
+ * Upload a contact-form attachment. Returns { ok, url?, error? }.
+ * NOTE: no manual Content-Type — the browser sets the multipart boundary.
+ */
+export async function serverUploadAttachment(file) {
+  try {
+    const fd = new FormData();
+    fd.append('attachment', file, file.name);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 60000);
+    let res;
+    try {
+      res = await fetch(UPLOAD_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd,
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    const data = await res.json().catch(() => null);
+    if (data && data.ok === true && typeof data.url === 'string') {
+      return { ok: true, url: data.url };
+    }
+    return { ok: false, error: (data && data.error) || ('http_' + res.status) };
+  } catch (e) {
+    return { ok: false, error: 'network' };
+  }
+}
+
 export const serverContact = (payload) =>
   postContact(payload);

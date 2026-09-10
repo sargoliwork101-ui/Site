@@ -1,0 +1,7 @@
+# Contact attachments: listable by NOBODY, executable by NOTHING.
+# Files have unguessable 32-hex names; only the admin inbox links to them.
+<FilesMatch "\.(php|phtml|phar|cgi|pl|py|sh)$">
+  Require all denied
+</FilesMatch>
+Options -Indexes -ExecCGI
+php_flag engine off

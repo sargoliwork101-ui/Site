@@ -416,11 +416,36 @@ const hexToBytes = (hex) => {
 export const isLocalPasswordHash = (value) =>
   typeof value === 'string' && value.startsWith('pbkdf2$');
 
-const hasWebCrypto = () =>
+export const hasWebCrypto = () =>
   typeof window !== 'undefined' &&
   !!window.crypto &&
   !!window.crypto.subtle &&
   typeof window.crypto.subtle.importKey === 'function';
+
+/**
+ * Plain-HTTP fallback stretcher (salted + stretched cyrb53). NOT
+ * cryptographic — but opaque, deterministic, and verifiable, so local-mode
+ * logins keep working where WebCrypto is unavailable. BYTE-IDENTICAL to the
+ * original inline loop: previously-stored `simple$` values MUST keep verifying.
+ */
+const fallbackStretchHex = (salt, pw, rounds = 20000) => {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  const str = `${salt}:${pw}`;
+  for (let round = 0; round < rounds; round++) {
+    const s = round === 0 ? str : `${h1.toString(16)}${h2.toString(16)}:${str}`;
+    h1 = 0xdeadbeef;
+    h2 = 0x41c6ce57;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  }
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+};
 
 /**
  * Hash a password for local-mode storage. Falls back to a salted,
@@ -443,23 +468,7 @@ export async function hashPasswordLocal(password) {
   // No-secure-context fallback: salted + stretched cyrb53 (NOT cryptographic,
   // but opaque). Local/testing mode only.
   const salt = Math.floor(Math.random() * 0xffffffff).toString(16);
-  let h1 = 0xdeadbeef ^ 0;
-  let h2 = 0x41c6ce57 ^ 0;
-  const str = `${salt}:${pw}`;
-  for (let round = 0; round < 20000; round++) {
-    const s = round === 0 ? str : `${h1.toString(16)}${h2.toString(16)}:${str}`;
-    h1 = 0xdeadbeef;
-    h2 = 0x41c6ce57;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s.charCodeAt(i);
-      h1 = Math.imul(h1 ^ ch, 2654435761);
-      h2 = Math.imul(h2 ^ ch, 1597334677);
-    }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  }
-  const hex = (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
-  return `simple$20000$${salt}$${hex}`;
+  return `simple$20000$${salt}$${fallbackStretchHex(salt, pw, 20000)}`;
 }
 
 /**
@@ -491,10 +500,16 @@ export async function verifyPasswordLocal(password, stored) {
   }
 
   if (stored.startsWith('simple$')) {
-    // Fallback hashes are NOT re-verifiable cheaply across sessions by design
-    // (they exist only to avoid plaintext); treat as mismatch and force reset.
-    // Exception: compare via re-hash is intentionally unsupported.
-    return false;
+    // No-secure-context fallback hash: re-compute and compare. Rounds are
+    // capped so a tampered localStorage value cannot DoS the login button.
+    try {
+      const [, roundsStr, salt, hashHex] = stored.split('$');
+      const rounds = parseInt(roundsStr, 10);
+      if (!rounds || rounds < 1 || rounds > 50000 || !salt || !hashHex) return false;
+      return timingSafeEqual(fallbackStretchHex(salt, pw, rounds), hashHex);
+    } catch (e) {
+      return false;
+    }
   }
 
   // Legacy plaintext (pre-hardening installs) — migrate after success.
