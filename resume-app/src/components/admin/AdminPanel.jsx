@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { RichTextEditorModal } from '../common/RichTextEditorModal';
-import { TaxonomyManagerModal } from '../common/TaxonomyManagerModal';
+import { TaxonomyManager, TaxonomyManagerModal } from '../common/TaxonomyManager';
 import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
 import { validateUploadFile, sanitizeSvgDataUrl } from '../../utils/security';
@@ -4732,110 +4732,17 @@ export const AdminPanel = () => {
                 {/* Sub-tab 6: Taxonomies */}
                 {settingsSubTab === 'taxonomies' && (
                   <div className="space-y-6">
-                    <div className="p-6 rounded-2xl bg-slate-950/90 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <h4 className="text-base font-bold text-white flex items-center gap-2">
-                          <Sliders className="w-5 h-5 text-cyan-400" />
-                          <span>مدیریت دسته‌ها، وضعیت‌ها و گزینه‌های سراسری</span>
-                        </h4>
-                        <p className="text-xs text-slate-400">
-                          ویرایش، حذف و افزودن گزینه‌های لیست‌های بازشونده با همگام‌سازی آبشاری خودکار در تمام بردهای موجود.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTaxonomyModalTab('boardCategories');
-                          setIsTaxonomyModalOpen(true);
-                        }}
-                        className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg cursor-pointer"
-                      >
-                        باز کردن پنجره مدیریت جامع
-                      </button>
+                    <div className="p-6 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-1">
+                      <h4 className="text-base font-bold text-white flex items-center gap-2">
+                        <Sliders className="w-5 h-5 text-cyan-400" />
+                        <span>مدیریت دسته‌ها، وضعیت‌ها و گزینه‌های سراسری</span>
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        ویرایش، حذف و افزودن گزینه‌های لیست‌های بازشونده با همگام‌سازی آبشاری خودکار در تمام بردهای موجود.
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                            <Cpu className="w-4 h-4 text-cyan-400" />
-                            <span>دسته‌های بردهای سخت‌افزاری</span>
-                          </h5>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTaxonomyModalTab('boardCategories');
-                              setIsTaxonomyModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold"
-                          >
-                            ویرایش و افزودن
-                          </button>
-                        </div>
-                        <div className="space-y-1.5">
-                          {(data.taxonomies?.boardCategories || []).map((cat) => (
-                            <div key={cat.id} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                              <span className="font-bold text-white">{cat.labelFa}</span>
-                              <span className="font-mono text-cyan-300 text-[11px]">{cat.labelEn}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                            <BookOpen className="w-4 h-4 text-emerald-400" />
-                            <span>دسته‌های مقالات تخصصی</span>
-                          </h5>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTaxonomyModalTab('articleCategories');
-                              setIsTaxonomyModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold"
-                          >
-                            ویرایش و افزودن
-                          </button>
-                        </div>
-                        <div className="space-y-1.5">
-                          {(data.taxonomies?.articleCategories || []).map((cat) => (
-                            <div key={cat.id} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                              <span className="font-bold text-white">{cat.labelFa}</span>
-                              <span className="font-mono text-emerald-300 text-[11px]">{cat.labelEn}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                            <Cpu className="w-4 h-4 text-purple-400" />
-                            <span>نرم‌افزارهای طراحی مدارات EDA</span>
-                          </h5>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTaxonomyModalTab('edaTools');
-                              setIsTaxonomyModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs font-semibold"
-                          >
-                            ویرایش و افزودن
-                          </button>
-                        </div>
-                        <div className="space-y-1.5">
-                          {(data.taxonomies?.edaTools || []).map((tl) => (
-                            <div key={tl.id} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                              <span className="font-bold text-white">{tl.labelFa}</span>
-                              <span className="font-mono text-purple-300 text-[11px]">{tl.labelEn}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    <TaxonomyManager />
                   </div>
                 )}
 
