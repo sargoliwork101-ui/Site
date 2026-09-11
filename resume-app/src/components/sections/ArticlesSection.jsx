@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { formatNum, toEnglishDigits } from '../../utils/numberHelper';
+import { sanitizeUrl } from '../../utils/security';
 import {
   BookOpen,
   Clock,
@@ -176,7 +177,7 @@ export const ArticlesSection = () => {
               <div className="px-5 py-3.5 border-t border-slate-800/80 bg-slate-950/40 flex items-center justify-between text-xs">
                 {article.pdfUrl ? (
                   <a
-                    href={article.pdfUrl}
+                    href={sanitizeUrl(article.pdfUrl)}
                     download={article.pdfFileName || 'article.pdf'}
                     onClick={(e) => e.stopPropagation()}
                     title={isFa ? 'دانلود سند پیوست مقاله' : 'Download Paper Document'}

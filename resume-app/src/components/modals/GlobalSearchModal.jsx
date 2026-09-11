@@ -81,7 +81,7 @@ export const GlobalSearchModal = () => {
         const descMatch =
           (board.shortDescFa && board.shortDescFa.toLowerCase().includes(q)) ||
           (board.shortDescEn && board.shortDescEn.toLowerCase().includes(q));
-        const interfacesMatch = (board.interfaces || []).some((it) => it.toLowerCase().includes(q));
+        const interfacesMatch = (board.interfaces || []).some((it) => it && String(it).toLowerCase().includes(q));
 
         if (titleMatch || mcuMatch || catMatch || edaMatch || descMatch || interfacesMatch) {
           list.push({
@@ -112,7 +112,7 @@ export const GlobalSearchModal = () => {
         const sumMatch =
           (art.summaryFa && art.summaryFa.toLowerCase().includes(q)) ||
           (art.summaryEn && art.summaryEn.toLowerCase().includes(q));
-        const tagMatch = (art.tags || []).some((t) => t.toLowerCase().includes(q));
+        const tagMatch = (art.tags || []).some((t) => t && String(t).toLowerCase().includes(q));
 
         if (titleMatch || catMatch || sumMatch || tagMatch) {
           list.push({

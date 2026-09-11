@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Github, Linkedin } from '../common/BrandIcons';
 import { sanitizeText, validateEmail, contactRateLimiter, triggerSafeDownload, copyTextToClipboard } from '../../utils/security';
+import { sanitizeUrl } from '../../utils/security';
 import { serverContact, serverUploadAttachment } from '../../utils/serverAuth';
 
 const MAX_FILE_BYTES = 20971520; // 20MB
@@ -380,7 +381,7 @@ END:VCARD`;
                 </div>
               </div>
               <a
-                href={info.telegram}
+                href={sanitizeUrl(info.telegram)}
                 target="_blank"
                 rel="noopener noreferrer"
                 title={isFa ? 'ارسال پیام مستقیم در تلگرام' : 'Send message via Telegram'}
@@ -406,7 +407,7 @@ END:VCARD`;
             <div className="p-5 rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <a
-                  href={info.github}
+                  href={sanitizeUrl(info.github)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
@@ -416,7 +417,7 @@ END:VCARD`;
                   <Github className="w-4 h-4" />
                 </a>
                 <a
-                  href={info.linkedin}
+                  href={sanitizeUrl(info.linkedin)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"

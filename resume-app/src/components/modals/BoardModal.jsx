@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { Interactive3DViewer } from '../common/Interactive3DViewer';
 import { formatNum, toEnglishDigits, toPersianDigits } from '../../utils/numberHelper';
+import { sanitizeUrl } from '../../utils/security';
 import {
   X,
   Cpu,
@@ -295,7 +296,7 @@ export const BoardModal = () => {
             {/* Direct Datasheet / Spec PDF Link if Provided */}
             {selectedBoard.datasheetUrl && (
               <a
-                href={selectedBoard.datasheetUrl}
+                href={sanitizeUrl(selectedBoard.datasheetUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all shadow-sm"
@@ -308,7 +309,7 @@ export const BoardModal = () => {
 
             {selectedBoard.githubUrl && (
               <a
-                href={selectedBoard.githubUrl}
+                href={sanitizeUrl(selectedBoard.githubUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors"

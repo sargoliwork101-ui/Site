@@ -36,7 +36,7 @@ import {
   Code2,
   Trash2
 } from 'lucide-react';
-import { sanitizeSvgDataUrl, sanitizeText, validateUploadFile } from '../../utils/security';
+import { sanitizeSvgDataUrl, sanitizeText, sanitizeUrl, validateUploadFile } from '../../utils/security';
 import { useData } from '../../context/DataContext';
 
 export const RichTextEditorModal = ({
@@ -97,6 +97,25 @@ export const RichTextEditorModal = ({
       editorRef.current.innerHTML = content || '<p><br></p>';
     }
   }, [viewMode]);
+
+  // Ctrl+S / Cmd+S = save & apply (the footer button promises this shortcut).
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        const finalContent = viewMode === 'wysiwyg' && editorRef.current ? editorRef.current.innerHTML : content;
+        if (onSave) onSave(finalContent);
+        setIsSavedRecently(true);
+        setTimeout(() => {
+          setIsSavedRecently(false);
+          onClose();
+        }, 400);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, viewMode, content, onSave, onClose]);
 
   if (!isOpen) return null;
 
@@ -245,8 +264,18 @@ export const RichTextEditorModal = ({
   // Insert Link
   const handleInsertLink = () => {
     if (!linkUrl) return;
-    const cleanUrl = linkUrl.startsWith('http') || linkUrl.startsWith('#') ? linkUrl : `https://${linkUrl}`;
-    const linkHtml = `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: #00ffcc; text-decoration: underline; font-weight: 600;">${linkText || cleanUrl}</a>`;
+    const prefixed = linkUrl.startsWith('http') || linkUrl.startsWith('#') ? linkUrl : `https://${linkUrl}`;
+    // sanitizeUrl blocks javascript:/scheme payloads (React-prop safe), but this
+    // URL is interpolated into an HTML *string*, so also strip attribute-breaking
+    // characters; sanitizeText strips tags/handlers from the label.
+    // eslint-disable-next-line no-control-regex
+    const cleanUrl = sanitizeUrl(prefixed, '#').replace(/["'`<>\u0000-\u001F\u007F]/g, '');
+    if (cleanUrl === '#' || cleanUrl === '') {
+      showToast('آدرس واردشده معتبر نیست.', 'error');
+      return;
+    }
+    const safeText = sanitizeText(linkText) || cleanUrl;
+    const linkHtml = `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: #00ffcc; text-decoration: underline; font-weight: 600;">${safeText}</a>`;
     if (editorRef.current) {
       editorRef.current.focus();
       document.execCommand('insertHTML', false, linkHtml);
@@ -329,6 +358,9 @@ export const RichTextEditorModal = ({
     let textToExport = content;
     let mimeType = 'text/plain';
     let fileExt = 'txt';
+    if (format === 'txt') {
+      textToExport = (content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
 
     if (format === 'doc') {
       textToExport = `<!DOCTYPE html><html lang="${language}" dir="${direction}"><head><meta charset="utf-8"><title>${title}</title><style>body{font-family: Arial, sans-serif; line-height: 1.6; padding: 30px;}</style></head><body>${content}</body></html>`;
@@ -340,13 +372,18 @@ export const RichTextEditorModal = ({
       fileExt = 'html';
     }
 
-    const blob = new Blob([textToExport], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fieldName || 'document'}_${Date.now()}.${fileExt}`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([textToExport], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${fieldName || 'document'}_${Date.now()}.${fileExt}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`فایل ${fileExt.toUpperCase()} با موفقیت دانلود شد.`);
+    } catch (e) {
+      showToast('خطا در ساخت فایل خروجی.', 'error');
+    }
   };
 
   // Save handler
@@ -1107,7 +1144,7 @@ export const RichTextEditorModal = ({
                   min={1}
                   max={20}
                   value={tableRows}
-                  onChange={(e) => setTableRows(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setTableRows(Math.min(20, Math.max(1, parseInt(e.target.value) || 1)))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
                 />
               </div>
@@ -1119,7 +1156,7 @@ export const RichTextEditorModal = ({
                   min={1}
                   max={10}
                   value={tableCols}
-                  onChange={(e) => setTableCols(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setTableCols(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-500"
                 />
               </div>

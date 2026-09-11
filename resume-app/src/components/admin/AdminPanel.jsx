@@ -5,6 +5,7 @@ import { TaxonomyManager } from '../common/TaxonomyManager';
 import { UserManagementSection } from './UserManagementSection';
 import { BlogManagementSection } from './BlogManagementSection';
 import { validateUploadFile, sanitizeSvgDataUrl, copyTextToClipboard } from '../../utils/security';
+import { sanitizeUrl, uniqueId } from '../../utils/security';
 import { serverSmtpGet, serverSmtpSave, serverSmtpReveal, serverSmtpTest } from '../../utils/serverAuth';
 import {
   serverBackupSave,
@@ -126,7 +127,6 @@ export const AdminPanel = () => {
     snapshots,
     users,
     currentUser,
-    switchUserForTesting,
     ROLE_DEFINITIONS,
     hasPermission,
     updatePersonalInfo,
@@ -972,7 +972,11 @@ export const AdminPanel = () => {
   const handleBoardSave = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const titleFa = formData.get('titleFa');
+    const titleFa = (formData.get('titleFa') || '').trim();
+    if (!titleFa) {
+      showToast('عنوان فارسی برد الزامی است.', 'error');
+      return;
+    }
     const titleEn = formData.get('titleEn') || autoTranslateFaToEn(titleFa);
     const shortDescFa = formData.get('shortDescFa');
     const shortDescEn = formData.get('shortDescEn') || autoTranslateFaToEn(shortDescFa);
@@ -1021,7 +1025,7 @@ export const AdminPanel = () => {
       category: categoryId,
       categoryFa,
       categoryEn,
-      layers: parseInt(formData.get('layers') || '4'),
+      layers: parseInt(formData.get('layers') || '4', 10) || 4,
       layersFa,
       layersEn,
       mcu: mcuFa || mcuEn || boardForm?.mcu || '',
@@ -1069,7 +1073,11 @@ export const AdminPanel = () => {
   const handleArticleSave = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const titleFa = formData.get('titleFa');
+    const titleFa = (formData.get('titleFa') || '').trim();
+    if (!titleFa) {
+      showToast('عنوان فارسی مقاله الزامی است.', 'error');
+      return;
+    }
     const titleEn = formData.get('titleEn') || autoTranslateFaToEn(titleFa);
     const summaryFa = formData.get('summaryFa');
     const summaryEn = formData.get('summaryEn') || autoTranslateFaToEn(summaryFa);
@@ -1235,7 +1243,7 @@ export const AdminPanel = () => {
       .filter(Boolean);
 
     const newExp = {
-      id: expForm.id || 'exp-' + Date.now(),
+      id: expForm.id || uniqueId('exp'),
       roleFa,
       roleEn,
       companyFa,
@@ -2529,7 +2537,7 @@ export const AdminPanel = () => {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <a
-                              href={boardForm.datasheetUrl}
+                              href={sanitizeUrl(boardForm.datasheetUrl)}
                               download={boardForm.datasheetFileName || 'datasheet.pdf'}
                               target="_blank"
                               rel="noreferrer"
@@ -2942,7 +2950,7 @@ export const AdminPanel = () => {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <a
-                              href={articleForm.pdfUrl}
+                              href={sanitizeUrl(articleForm.pdfUrl)}
                               download={articleForm.pdfFileName || 'article.pdf'}
                               target="_blank"
                               rel="noreferrer"
@@ -3835,7 +3843,7 @@ export const AdminPanel = () => {
                         type="button"
                         onClick={() => {
                           const newEdu = {
-                            id: 'edu-' + Date.now(),
+                            id: uniqueId('edu'),
                             degreeFa: 'کارشناسی مهندسی برق',
                             degreeEn: 'B.Sc. in Electrical Engineering',
                             universityFa: 'دانشگاه تهران',
@@ -4005,7 +4013,7 @@ export const AdminPanel = () => {
                         type="button"
                         onClick={() => {
                           const newCert = {
-                            id: 'cert-' + Date.now(),
+                            id: uniqueId('cert'),
                             titleFa: 'گواهینامه تخصصی طراحی مدارات فرکانس بالا',
                             titleEn: 'Advanced High-Speed PCB Specialist',
                             issuer: 'IPC International',
@@ -4197,7 +4205,7 @@ export const AdminPanel = () => {
                         </p>
                         {msg.attachment && (msg.attachment.url || msg.attachment.inline) && (
                           <a
-                            href={msg.attachment.url || msg.attachment.inline}
+                            href={sanitizeUrl(msg.attachment.url || msg.attachment.inline)}
                             download={msg.attachment.name || true}
                             target={msg.attachment.url ? '_blank' : undefined}
                             rel="noreferrer"
@@ -5289,7 +5297,15 @@ export const AdminPanel = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => deleteSnapshot(snap.id)}
+                                onClick={() => {
+                                  showConfirmDialog({
+                                    type: 'danger',
+                                    title: 'حذف نسخه؟',
+                                    message: `نسخه «${snap.name}» برای همیشه حذف می‌شود.`,
+                                    confirmText: 'بله، حذف کن',
+                                    onConfirm: () => deleteSnapshot(snap.id),
+                                  });
+                                }}
                                 disabled={snapshots.length <= 1}
                                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 text-xs disabled:opacity-30 cursor-pointer"
                               >

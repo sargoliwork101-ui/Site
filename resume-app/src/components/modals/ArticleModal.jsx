@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';
+import { sanitizeUrl } from '../../utils/security';
 import {
   X,
   BookOpen,
@@ -64,7 +65,7 @@ export const ArticleModal = () => {
           <div className="flex items-center gap-2">
             {hasPdf && (
               <a
-                href={selectedArticle.pdfUrl}
+                href={sanitizeUrl(selectedArticle.pdfUrl)}
                 download={selectedArticle.pdfFileName || 'research_article.pdf'}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -168,7 +169,7 @@ export const ArticleModal = () => {
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <a
-                  href={selectedArticle.pdfUrl}
+                  href={sanitizeUrl(selectedArticle.pdfUrl)}
                   download={selectedArticle.pdfFileName || 'research_article.pdf'}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -179,7 +180,7 @@ export const ArticleModal = () => {
                 </a>
 
                 <a
-                  href={selectedArticle.pdfUrl}
+                  href={sanitizeUrl(selectedArticle.pdfUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"

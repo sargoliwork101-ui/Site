@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
+import { uniqueId } from '../../utils/security';
 import {
   Plus,
   Edit2,
@@ -107,7 +108,7 @@ export const TaxonomyManager = ({ focusId = null }) => {
     }
     const finalEn = (draft.en || '').trim() || autoTranslateFaToEn(draft.fa.trim());
     const slug = finalEn.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-    const id = slug ? `${slug}-${Date.now().toString().slice(-4)}` : `${listId.replace('Categories', '').replace('es', '')}-${Date.now()}`;
+    const id = uniqueId(slug || listId);
 
     addTaxonomyOption(listId, {
       id,

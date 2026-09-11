@@ -36,7 +36,8 @@ import {
   copyTextToClipboard,
   needsLocalRehash,
   validateUploadFile,
-  sanitizeSvgDataUrl
+  sanitizeSvgDataUrl,
+  uniqueId
 } from '../utils/security';
 import {
   fetchServerStatus,
@@ -983,7 +984,7 @@ export const DataProvider = ({ children }) => {
       };
     }
     const newMedia = {
-      id: `media-${Date.now()}`,
+      id: uniqueId('media'),
       name: sanitizeFileName(desc.name || 'uploaded_image.jpg'),
       url: desc.url,
       type: desc.type || 'image/jpeg',
@@ -1038,7 +1039,7 @@ export const DataProvider = ({ children }) => {
   const addBoard = (boardData) => {
     const newBoard = {
       ...boardData,
-      id: `board-${Date.now()}`,
+      id: uniqueId('board'),
       createdDate: boardData.createdDate || new Date().toISOString().split('T')[0],
       featured: Boolean(boardData.featured),
     };
@@ -1074,7 +1075,7 @@ export const DataProvider = ({ children }) => {
   const addArticle = (articleData) => {
     const newArticle = {
       ...articleData,
-      id: `art-${Date.now()}`,
+      id: uniqueId('art'),
       createdDate: articleData.createdDate || new Date().toISOString().split('T')[0],
       views: 0,
       likes: 0,
@@ -1111,7 +1112,7 @@ export const DataProvider = ({ children }) => {
   const addBlogPost = (postData) => {
     const newPost = {
       ...postData,
-      id: `post-${Date.now()}`,
+      id: uniqueId('post'),
       publishDate: postData.publishDate || new Date().toLocaleDateString('fa-IR'),
       views: 0,
       likes: 0,
@@ -1377,7 +1378,7 @@ export const DataProvider = ({ children }) => {
     }
 
     const newMsg = {
-      id: `msg-${Date.now()}`,
+      id: uniqueId('msg'),
       name: sanitizeText(msgData.name),
       email: sanitizeText(msgData.email),
       company: sanitizeText(msgData.company || ''),
@@ -1643,7 +1644,7 @@ export const DataProvider = ({ children }) => {
     }
 
     const inputIdentifier = (usernameOrEmail || '').trim().toLowerCase();
-    const inputPassword = (password || '').trim();
+    const inputPassword = (password || ''); // NEVER trim: spaces can be part of a password
     const wantsAdmin = !inputIdentifier || inputIdentifier === 'admin';
 
     // --- REAL PATH: master admin verified by the server (bcrypt + session) ---
@@ -1652,9 +1653,13 @@ export const DataProvider = ({ children }) => {
       if (!r.ok) {
         loginRateLimiter.recordAttempt();
         showToast(
-          r.error === 'rate_limit'
-            ? `ورود موقتاً مسدود است. ${r.retryAfter || 60} ثانیه دیگر تلاش کنید.`
-            : 'نام کاربری یا رمز عبور وارد شده نادرست است!',
+          r.error === 'locked'
+            ? `به دلیل تلاش‌های ناموفق، ورود ${r.retryAfter || 30} ثانیه قفل شد.`
+            : r.error === 'rate_limit'
+              ? `ورود موقتاً مسدود است. ${r.retryAfter || 60} ثانیه دیگر تلاش کنید.`
+              : r.error === 'network'
+                ? 'خطای اتصال به سرور. اینترنت را بررسی کنید.'
+                : 'نام کاربری یا رمز عبور وارد شده نادرست است!',
           'error'
         );
         return { success: false, error: r.error || 'invalid_credentials', retryAfter: r.retryAfter || 0 };
@@ -1764,7 +1769,7 @@ export const DataProvider = ({ children }) => {
       showToast('این نام کاربری قبلاً در سیستم ثبت شده است.', 'error');
       return false;
     }
-    const rawPw = (userData.password || '').trim();
+    const rawPw = (userData.password || ''); // NEVER trim passwords
     if (rawPw.length < 8) {
       showToast('رمز عبور کاربر باید حداقل ۸ کاراکتر باشد.', 'error');
       return false;
@@ -1778,7 +1783,7 @@ export const DataProvider = ({ children }) => {
       : { ...roleDef.defaultPermissions };
 
     const newUser = {
-      id: `user-${Date.now()}`,
+      id: uniqueId('user'),
       username: cleanUsername,
       password: hashedPw, // PBKDF2 hash — never plaintext (local mode)
       nameFa: sanitizeText(userData.nameFa) || cleanUsername,
@@ -1806,7 +1811,7 @@ export const DataProvider = ({ children }) => {
     const fields = { ...(updatedFields || {}) };
     if (!fields.password) delete fields.password; // edit without pw change → keep old
     if (fields.password && !isLocalPasswordHash(fields.password)) {
-      const rawPw = String(fields.password).trim();
+      const rawPw = String(fields.password); // NEVER trim passwords
       if (rawPw.length < 8) {
         showToast('رمز عبور کاربر باید حداقل ۸ کاراکتر باشد.', 'error');
         return false;
@@ -1864,19 +1869,6 @@ export const DataProvider = ({ children }) => {
 
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     showToast(`کاربر «${target.nameFa}» با موفقیت حذف گردید.`);
-    return true;
-  };
-
-  /**
-   * Switch User for Instant Testing & Role Preview
-   */
-  const switchUserForTesting = (userId) => {
-    const target = users.find((u) => u.id === userId);
-    if (!target) return false;
-    setCurrentUser(target);
-    setIsAuthenticated(true);
-    sessionSet(AUTH_KEY, 'true');
-    showToast(`تغییر سریع به کاربر «${target.nameFa}» (${ROLE_DEFINITIONS[target.role]?.labelFa})`);
     return true;
   };
 
@@ -1969,12 +1961,12 @@ export const DataProvider = ({ children }) => {
    */
   const resetPasswordWithOtp = async (newPassword) => {
     if (!backend.available || !serverResetToken) return false;
-    const trimmedPw = (newPassword || '').trim();
-    if (trimmedPw.length < 8) {
+    const newPw = (newPassword || ''); // NEVER trim passwords
+    if (newPw.length < 8) {
       showToast('رمز عبور جدید باید حداقل ۸ کاراکتر باشد.', 'error');
       return false;
     }
-    const r = await serverResetPassword(serverResetToken, trimmedPw);
+    const r = await serverResetPassword(serverResetToken, newPw);
     setServerResetToken(null); // single-use: always drop after the attempt
     if (!r.ok) {
       showToast('توکن بازیابی نامعتبر یا منقضی است. از اول شروع کنید.', 'error');
@@ -2071,13 +2063,13 @@ export const DataProvider = ({ children }) => {
    * SERVER mode: verified + bcrypt-hashed server-side. LOCAL mode: PBKDF2 hash.
    */
   const changeAdminPassword = async (currentPassword, newPassword) => {
-    const trimmed = (newPassword || '').trim();
-    if (!trimmed || trimmed.length < 8) {
+    const newPw = (newPassword || ''); // NEVER trim passwords
+    if (!newPw || newPw.length < 8) {
       showToast('رمز عبور جدید باید حداقل ۸ کاراکتر باشد.', 'error');
       return false;
     }
     if (backend.available) {
-      const r = await serverChangePassword(currentPassword || '', trimmed);
+      const r = await serverChangePassword(currentPassword || '', newPw);
       if (!r.ok) {
         showToast(r.error === 'invalid_credentials' ? 'رمز عبور فعلی نادرست است.' : 'تغییر رمز ناموفق بود.', 'error');
         return false;
@@ -2094,7 +2086,7 @@ export const DataProvider = ({ children }) => {
       showToast('رمز عبور فعلی نادرست است.', 'error');
       return false;
     }
-    const h = await hashPasswordLocal(trimmed);
+    const h = await hashPasswordLocal(newPw);
     setUsers((prev) => (prev || []).map((u) => (u.username === 'admin' ? { ...u, password: h } : u)));
     setAdminSecurity((prev) => ({ ...prev, password: '' }));
     setLocalPwIsDefault(false);
@@ -2420,13 +2412,13 @@ export const DataProvider = ({ children }) => {
       minute: '2-digit',
     });
     const newSnapshot = {
-      id: `snap-${Date.now()}${auto ? '-auto' : ''}`,
+      id: uniqueId(auto ? 'snap-auto' : 'snap'),
       auto,
       name: customName || (auto ? `🤖 خودکار · ${faDateTime}` : `اسنپ‌شات ${now.toLocaleTimeString('fa-IR')}`),
       date: faDateTime,
       timestamp: Date.now(),
-      boardsCount: data.boards.length,
-      articlesCount: data.articles.length,
+      boardsCount: (data.boards || []).length,
+      articlesCount: (data.articles || []).length,
       skillsCount: (data.skills || []).reduce((acc, g) => acc + (g.items?.length || 0), 0),
       mediaCount: (data.mediaLibrary || []).length,
       data: JSON.parse(JSON.stringify(data)),
@@ -2513,10 +2505,17 @@ export const DataProvider = ({ children }) => {
   });
 
   const exportDataJson = () => {
-    const fullBackupObject = buildFullBackup();
-    const fileName = `site_full_backup_${new Date().toISOString().split('T')[0]}.json`;
-    triggerSafeDownload(fullBackupObject, fileName, 'application/json');
-    showToast('فایل بک‌آپ کامل سایت دانلود شد (محتوا، کاربران، امنیت، سؤالات بازیابی).');
+    // NOTE: triggerSafeDownload takes a Blob (or URL) — passing the raw
+    // object silently produced href="#" (no download at all).
+    try {
+      const fullBackupObject = buildFullBackup();
+      const fileName = `site_full_backup_${new Date().toISOString().split('T')[0]}.json`;
+      const blob = new Blob([JSON.stringify(fullBackupObject, null, 2)], { type: 'application/json;charset=utf-8;' });
+      triggerSafeDownload(blob, fileName);
+      showToast('فایل بک‌آپ کامل سایت دانلود شد (محتوا، کاربران، امنیت، سؤالات بازیابی).');
+    } catch (e) {
+      showToast('خطا در ساخت فایل بک‌آپ.', 'error');
+    }
   };
 
   const copyBackupToClipboard = async () => {
@@ -2711,7 +2710,6 @@ export const DataProvider = ({ children }) => {
         addUser,
         updateUser,
         deleteUser,
-        switchUserForTesting,
         hasPermission,
         changeAdminPassword,
         requestPasswordResetOtp,

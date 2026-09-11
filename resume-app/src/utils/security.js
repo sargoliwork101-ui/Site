@@ -20,6 +20,19 @@ import DOMPurify from 'dompurify';
  * @param {string} b - Second string (stored hash / secret)
  * @returns {boolean} True if strings are strictly identical
  */
+/**
+ * Collision-proof client ID (`board-lxyz-1a2b3c`). Bare Date.now() IDs collide
+ * when two items are created within the same millisecond (double-Enter /
+ * double-click) — React key dupes + wrong-item updates/deletes follow.
+ * Monotonic per-tab counter + ms time + random suffix: unique every call.
+ */
+let __uidSeq = 0;
+export const uniqueId = (prefix) => {
+  __uidSeq += 1;
+  const rand = Math.floor(Math.random() * 46656).toString(36);
+  return `${prefix}-${Date.now().toString(36)}-${__uidSeq.toString(36)}${rand}`;
+};
+
 export const timingSafeEqual = (a, b) => {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
   if (a.length !== b.length) return false;
@@ -86,21 +99,36 @@ export const sanitizeText = (input) => {
 export const sanitizeUrl = (url, fallback = '#') => {
   if (!url || typeof url !== 'string') return fallback;
   const trimmed = url.trim();
+  if (!trimmed) return fallback;
 
-  // Allow safe anchor hashes and relative routes
-  if (trimmed.startsWith('#') || trimmed.startsWith('/')) {
+  // Bare `//evil.com/x` is a protocol-relative navigation, NOT a safe path.
+  if (trimmed.startsWith('//')) return fallback;
+
+  // Allow safe anchor hashes and root-relative routes (no backslash tricks:
+  // browsers read `/\evil.com` as protocol-relative too).
+  if (trimmed.startsWith('#') || (trimmed.startsWith('/') && !trimmed.includes('\\'))) {
     return trimmed;
   }
 
-  // Allow safe base64 Data URLs (PDFs, Images, Office Docs)
+  // Allow safe base64 Data URLs (PDFs, Images, Office Docs) and blob: URLs.
+  // NOTE: `data:text/*` is deliberately NOT allowed — `data:text/html,<script>`
+  // navigates to attacker-controlled script (nothing in the app uses data:text/).
   if (
     trimmed.startsWith('data:image/') ||
     trimmed.startsWith('data:application/pdf') ||
     trimmed.startsWith('data:application/vnd.openxmlformats') ||
     trimmed.startsWith('data:application/msword') ||
-    trimmed.startsWith('data:text/') ||
     trimmed.startsWith('blob:')
   ) {
+    return trimmed;
+  }
+
+  // Allow bare-relative app paths (`uploads/contact/x.pdf`, `api/upload.php`,
+  // `files/doc.pdf`) — the PHP backend returns these. Safe iff there is NO
+  // scheme separator (kills `javascript:`/`data:`/every scheme trick), no
+  // backslash, and no HTML-breaking / control characters.
+  // eslint-disable-next-line no-control-regex
+  if (!trimmed.includes(':') && !trimmed.includes('\\') && !/["'`<>\u0000-\u001F\u007F]/.test(trimmed)) {
     return trimmed;
   }
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useData } from '../../context/DataContext';
 import { toPersianDigits } from '../../utils/numberHelper';
+import { sanitizeUrl } from '../../utils/security';
 import {
   Cpu,
   FileDown,
@@ -66,7 +67,7 @@ export const Footer = () => {
 
             <div className="flex items-center gap-3 pt-2">
               <a
-                href={info.github}
+                href={sanitizeUrl(info.github)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
@@ -76,7 +77,7 @@ export const Footer = () => {
                 <Github className="w-4 h-4" />
               </a>
               <a
-                href={info.linkedin}
+                href={sanitizeUrl(info.linkedin)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
@@ -86,7 +87,7 @@ export const Footer = () => {
                 <Linkedin className="w-4 h-4" />
               </a>
               <a
-                href={info.telegram}
+                href={sanitizeUrl(info.telegram)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
