@@ -13,6 +13,14 @@
  * @module Interactive3DViewer
  */
 
+/**
+ * ── فارسی: نکته مهم معماری ──
+ * با وجود اسمش، این کامپوننت با Canvas دوبعدی و ریاضیات تصویرسازی نوشته
+ * شده (نه three.js) — پس سبکه و وابستگی نداره. چرخش موس/لمسی، زوم، چرخش
+ * خودکار و ۵ رنگ ماسک لحیم داره. فقط از BoardModal صدا زده می‌شه.
+ * ⚠️ View-Only (قانون ۱۳): هیچ راهی برای دانلود فایل STEP/عکس اضافه نکن.
+ */
+
 import React, { useRef, useEffect, useState } from 'react';
 import {
   ZoomIn,

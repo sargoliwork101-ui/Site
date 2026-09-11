@@ -9,6 +9,14 @@
  * message + admin email. Nothing stored here can execute (see guards below).
  */
 
+/**
+ * ── فارسی ──
+ * آپلود فایل چسبیده به فرم تماس: فقط یه فایل، سقف حجم در config، پسوندهای
+ * مجاز، اسم تصادفی غیرقابل‌حدس، ذخیره در uploads/contact/. خروجی: آدرس
+ * نسبی (uploads/contact/...) که sanitizeUrl فرانت قبولش می‌کنه.
+ * ⚠️ پسوند اجرایی (php/...) قبول نکن؛ پوشه uploads با .htaccess ضداجراست.
+ */
+
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/mailer.php';
 

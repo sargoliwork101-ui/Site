@@ -7,6 +7,13 @@
  * No secrets live in this file — it is safe if ever served as text.
  */
 
+/**
+ * ── فارسی ──
+ * ثابت‌های مشترک همه endpointها: سقف‌ها (طول رمز، حجم آپلود/بک‌آپ)، نام
+ * فایل‌های دیتا، و توابع کمکی JSON. تنها چیزی که شاید دستی عوض کنی MAIL_FROM
+ * (فرستنده ایمیل‌ها — بذار روی دامنه خودت تا اسپم نشه). ⚠️ secret این‌جا نذار.
+ */
+
 declare(strict_types=1);
 
 // Production: NEVER print PHP errors (they would break JSON and leak paths).

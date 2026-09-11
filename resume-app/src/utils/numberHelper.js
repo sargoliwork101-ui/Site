@@ -5,6 +5,11 @@
  * 
  * Provides robust conversion between Persian (Farsi / Arabic) and English digits
  * and language-aware string formatting for bilingual synchronization.
+ *
+ * ── فارسی ──
+ * سه تابع: toEnglishDigits (ورودی کاربر/اعتبارسنجی)، toPersianDigits (نمایش
+ * فارسی اعداد)، formatNum (نمایش شرطی بر اساس زبان). هرجا عدد به کاربر نشون
+ * می‌دی از formatNum استفاده کن تا در حالت فارسی ارقام فارسی بشن.
  */
 
 /**

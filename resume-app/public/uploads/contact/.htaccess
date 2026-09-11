@@ -1,3 +1,4 @@
+# قفل اجرا: فایل‌های پیوست تماس نه لیست می‌شن نه اجرا — فقط لینک مستقیم.
 # Contact attachments: listable by NOBODY, executable by NOTHING.
 # Files have unguessable 32-hex names; only the admin inbox links to them.
 # NOTE: every stanza is IfModule-guarded — a bare `php_flag`/`Require` on a

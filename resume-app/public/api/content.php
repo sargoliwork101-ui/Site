@@ -11,6 +11,13 @@
  * holds secrets — users, passwords, SMTP and OTP data live elsewhere.
  */
 
+/**
+ * ── فارسی ──
+ * همگام‌سازی محتوای عمومی بین دستگاه‌های مالک: خواندن (get) عمومی و
+ * ریت‌لیمیت‌شده‌ست، نوشتن (save) فقط با سشن ادمین. ⚠️ فقط «محتوای نمایشی»
+ * این‌جا می‌ره — هرگز کاربر/رمز/SMTP/OTP رو تو content ذخیره نکن.
+ */
+
 require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/store.php';
 

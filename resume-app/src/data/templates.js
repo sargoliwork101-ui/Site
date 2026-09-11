@@ -1,5 +1,17 @@
-// templates.js - 50 Distinct Homepage Design Models & Themes for Resume / Portfolio
-
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * templates.js — ۵۰ قالب صفحه اول (رنگ‌ها، چیدمان، فونت)
+ * ═══════════════════════════════════════════════════════════════════
+ * این فایل چیه؟ کاتالوگ کامل قالب‌ها. هر قالب فقط «تنظیمات ظاهری»ـه —
+ * هیچ منطقی این‌جا نیست؛ کامپوننت‌ها با currentTemplate رنگ/چیدمان می‌گیرن.
+ * کِی بازش کن؟
+ *   • قالب جدید → یه آبجکت با همین شکل (id یکتا + category + colors کامل)
+ *     در دسته درست اضافه کن و count دسته رو در TEMPLATE_CATEGORIES زیاد کن
+ *   • تغییر رنگ/فونت یه قالب → همون آبجکت
+ * ⚠️ id قالب پیش‌فرض ('pcb-blueprint-dark') رو عوض نکن (fallback همه‌جاست).
+ * اگه colors یه قالب ناقص باشه، اون بخش رنگ fallback می‌گیره (کرش نمی‌کنه
+ * ولی زشت می‌شه) — همه کلیدهای colors رو پر کن.
+ */
 export const TEMPLATES = [
   // --- Category 1: Hardware & Electronics Lab (10) ---
   {
@@ -1314,6 +1326,7 @@ export const TEMPLATES = [
   }
 ];
 
+/** دسته‌بندی قالب‌ها برای تب‌های انتخابگر. ⚠️ count هر دسته باید با تعداد واقعی آبجکت‌ها بخونه. */
 export const TEMPLATE_CATEGORIES = [
   { id: 'all', labelFa: 'همه ۵۰ مدل طراحی', labelEn: 'All 50 Templates', count: 50 },
   { id: 'hardware', labelFa: 'سخت‌افزار و آزمایشگاه الکترونیک', labelEn: 'Hardware & PCB Lab', count: 10 },
@@ -1324,9 +1337,11 @@ export const TEMPLATE_CATEGORIES = [
   { id: 'glass-creative', labelFa: 'شیشه‌ای و خلاقانه (Glassmorphism)', labelEn: 'Glass & Creative', count: 6 },
 ];
 
+/** دسترسی سریع id → قالب (جای جستجوی خطی). */
 export const TEMPLATES_MAP = TEMPLATES.reduce((acc, t) => {
   acc[t.id] = t;
   return acc;
 }, {});
 
+/** قالب پیش‌فرض مطلق (آخرین حلقه زنجیره fallback در DataContext). */
 export const DEFAULT_TEMPLATE = TEMPLATES[0];

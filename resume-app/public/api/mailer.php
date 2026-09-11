@@ -7,6 +7,13 @@
  * service ever sees it.
  */
 
+/**
+ * ── فارسی ──
+ * ارسال ایمیل فارسی (UTF-8): اول صندوق SMTP پنل (اگه تنظیم شده باشه)، وگرنه
+ * mail() خود هاست. کد OTP فقط داخل همین ایمیله و هیچ‌وقت لاگ/نمایش داده
+ * نمی‌شه. ⚠️ برای دیباگ، بدنه ایمیل حاوی کد رو error_log نکن.
+ */
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/store.php'; // smtp_get_config() persists to api/data/smtp.json (0600)
 

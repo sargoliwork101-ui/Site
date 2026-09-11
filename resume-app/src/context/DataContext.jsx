@@ -15,6 +15,23 @@
  * @module DataContext
  */
 
+/**
+ * ── راهنمای فارسی: مغز متفکر سایت ──
+ * این فایل تنها منبع حقیقت فرانته: همه دیتا، لاگین، دسترسی‌ها، پیام‌ها،
+ * بک‌آپ‌ها و حتی Toast/دیالوگ این‌جا زندگی می‌کنن. هر کامپوننت با useData()
+ * بهش وصل می‌شه. نقشه ۱۵ بخش (با Ctrl+F پیدا کن):
+ *   ۱ دیتا و هایدریشن (لود/مرج/ذخیره) · ۲ اسنپ‌شات‌ها · ۳ امنیت ادمین ·
+ *   ۴ کاربران و RBAC · ۴.۵ دیالوگ/Toast/روتر وبلاگ · ۵ قالب و siteConfig ·
+ *   ۶ مشخصات فردی و سئو · ۷ مدیا · ۸ بردها (+پروژه شاخص) · ۹ مقالات و وبلاگ ·
+ *   ۱۰ مهارت/سوابق/تحصیل/گواهی · ۱۱ تاکسونومی (آبشاری) · ۱۲ پیام‌ها ·
+ *   ۱۳ احراز هویت و RBAC · ۱۴ فراموشی رمز و OTP · ۱۵ بک‌آپ/اسنپ‌شات/ایمپورت.
+ * دستور ساخت CRUD جدید: state داخل data + سه تابع add/update/delete با
+ *   uniqueId و showToast + export در value پایین فایل + فرم در AdminPanel.
+ * ⚠️ قوانین مقدس: (۱) اسم کلیدهای embedded-… و resume-… رو عوض نکن (۲) برای
+ * هر اکشن Toast و برای هر حذف showConfirmDialog (۳) رمز هرگز trim نشه
+ * (۴) در حالت امن، تصمیم امنیتی با سروره نه این‌جا (۵) این فایل تک‌نویسنده‌ست.
+ */
+
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initialData } from '../data/defaultData';
 import { storage, sessionStore, isPersistentStorageBlocked } from '../utils/safeStorage';
@@ -61,6 +78,9 @@ import {
 const DataContext = createContext(null);
 
 // LocalStorage Persistence Keys
+// ── کلیدهای حافظه مرورگر (⚠️ تغییرنام ممنوع — دیتای کاربرها می‌پره) ──
+// دیتای اصلی سایت | نسخه‌های پشتیبان | کانفیگ بک‌آپ خودکار. بقیه کلیدها
+// (کاربران، امنیت، سؤالات بازیابی، سشن لاگین) چند خط پایین‌تر تعریف شدن.
 const STORAGE_KEY = 'embedded_portfolio_data_v2';
 const SNAPSHOTS_KEY = 'embedded_portfolio_snapshots_v2';
 const AUTO_BACKUP_KEY = 'embedded_auto_backup_v1';
@@ -567,6 +587,8 @@ export const DataProvider = ({ children }) => {
   const [selectedBlogPost, setSelectedBlogPost] = useState(null);
 
   // Global Action Dialog Modal State (for confirm, alerts, warnings, deletion notices)
+  // 4.5. GLOBAL CONFIRM/ALERT DIALOGS, TOAST QUEUE & BLOG ROUTER
+  // (دیالوگ تایید سراسری، صف پیام‌ها و سوییچ نمای وبلاگ/پورتفولیو)
   const [dialogState, setDialogState] = useState({
     isOpen: false,
     type: 'confirm', // 'danger' | 'warning' | 'error' | 'success' | 'info' | 'confirm'
@@ -2776,6 +2798,11 @@ export const DataProvider = ({ children }) => {
   );
 };
 
+/**
+ * هوک دسترسی به مغز سایت. در هر کامپوننت داخل <DataProvider>:
+ *   const { data, showToast, ... } = useData();
+ * بیرون از Provider صدا زده بشه خطا می‌ده (عمداً — باگ‌یابی راحت‌تر).
+ */
 export const useData = () => {
   const context = useContext(DataContext);
   if (!context) throw new Error('useData must be used within a DataProvider');

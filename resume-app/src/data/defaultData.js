@@ -1,6 +1,23 @@
-// defaultData.js - Comprehensive default data for Hardware / Embedded Engineer Portfolio
-
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * defaultData.js — دیتای پیش‌فرض سایت (محتوای نمایشی + شکل دیتا)
+ * ═══════════════════════════════════════════════════════════════════
+ * این فایل چیه؟ محتوای اولیه‌ای که بازدیدکننده قبل از هر تنظیمی می‌بینه، و
+ * مهم‌تر: «قالب شکل دیتا» — هر فیلدی این‌جا باشه، همه‌جای اپ همون انتظار می‌ره.
+ * کِی بازش کن؟
+ *   • محتوای پیش‌فرض (متن معرفی، برد نمونه، مقاله نمونه...) → بخش مربوطه
+ *   • انتشار محتوای واقعی پنل برای بازدیدکنندگان → خروجی Export JSON پنل رو
+ *     این‌جا مرج کن (حلقه انتشار در AI_INSTRUCTIONS.md)
+ *   • اضافه کردن فیلد جدید به یه آیتم → هم این‌جا (مقدار پیش‌فرض) هم در
+ *     DataContext (merge هنگام لود) و هم در فرم ادمین
+ * ⚠️ اسم فیلدهای موجود رو عوض نکن/حذف نکن — دیتای ذخیره‌شده کاربرها و
+ * فایل‌های بک‌آپ قدیمی می‌شکنن. فقط «افزودن» با مقدار پیش‌فرض مجازه.
+ * نقشه بخش‌ها: personalInfo → taxonomies → boards → articles → blogPosts →
+ *   skills → experiences → education → certifications → seoSettings →
+ *   siteConfig → messages
+ */
 export const initialData = {
+  // ── مشخصات فردی (نام، عنوان، راه‌های تماس، شبکه‌های اجتماعی) — در Hero/تماس/فوتر نمایش داده می‌شه.
   personalInfo: {
     fullNameFa: 'مهندس آرش طاهری',
     fullNameEn: 'Arash Taheri',
@@ -38,6 +55,7 @@ export const initialData = {
     ]
   },
 
+  // ── گزینه‌های دراپ‌دان سراسری (دسته برد/مقاله، وضعیت‌ها، نرم‌افزارها) — تغییر نام این‌جا همه‌جا اعمال می‌شه.
   taxonomies: {
     boardCategories: [
       { id: 'iot-industrial', labelFa: 'اینترنت اشیا و کنترل صنعتی', labelEn: 'Industrial IoT & Automation' },
@@ -72,6 +90,7 @@ export const initialData = {
     ]
   },
 
+  // ── بردهای سخت‌افزاری. برای برد نمونه جدید: یه آبجکت با همین شکل (titleFa/titleEn + مشخصات دوزبانه) اضافه کن.
   boards: [
     {
       id: 'board-1',
@@ -887,6 +906,7 @@ export const initialData = {
     }
   ],
 
+  // ── مقالات تخصصی صفحه اول (خلاصه + لینک PDF). متن کامل وبلاگ در blogPostsـه، نه این‌جا.
   articles: [
     {
       id: 'article-1',
@@ -1007,6 +1027,7 @@ Leveraging X.509 certificates and dedicated secure elements prevents physical ke
     }
   ],
 
+  // ── پست‌های وبلاگ (پرتال جدا). هر پست: slug یکتا + محتوای HTML دوزبانه + کاور + تگ.
   blogPosts: [
     {
       id: 'post-1',
@@ -1267,6 +1288,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     }
   ],
 
+  // ── گروه‌های مهارت (درصد تسلط). ⚠️ سال سابقه ممنوع — فقط درصد و دسته‌بندی.
   skills: [
     {
       categoryFa: 'طراحی سخت‌افزار و بردهای الکترونیکی (PCB Design)',
@@ -1324,6 +1346,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     }
   ],
 
+  // ── سوابق شغلی (درخت لینکدین). تاریخ‌ها میلادی YYYY-MM باشن تا مرتب‌سازی زمانی درست کار کنه.
   experiences: [
     {
       id: 'exp-1',
@@ -1448,6 +1471,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     }
   ],
 
+  // ── مدارک تحصیلی.
   education: [
     {
       id: 'edu-1',
@@ -1477,6 +1501,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     }
   ],
 
+  // ── گواهینامه‌ها و دوره‌ها.
   certifications: [
     {
       id: 'cert-1',
@@ -1510,6 +1535,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     }
   ],
 
+  // ── سئو پیش‌فرض (عنوان، توضیحات متا، canonical). بعد از دیپلوی، دامنه واقعی رو از پنل (استودیو سئو) بذار.
   seoSettings: {
     siteTitle: 'مهندس آرش طاهری | رزومه و پورتفولیو مهندسی الکترونیک و طراحی برد PCB',
     siteTitleEn: 'Arash Taheri | Senior Hardware & Embedded Systems Engineer Portfolio',
@@ -1528,6 +1554,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     faviconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ffcc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='20' rx='5' ry='5'></rect><path d='M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z'></path><line x1='17.5' y1='6.5' x2='17.51' y2='6.5'></line></svg>"
   },
 
+  // ── تنظیمات کلان: زبان، قالب فعال، فونت، انیمیشن پس‌زمینه، محدودیت نمایش (rows×cols).
   siteConfig: {
     language: 'fa',
     currentTemplateId: 'pcb-blueprint-dark',
@@ -1549,6 +1576,7 @@ void vPortSuppressTicksAndSleep(TickType_t xExpectedIdleTime) {
     articlesGridColumns: 3, // 2, 3, or 4 columns per row
   },
 
+  // ── پیام نمونه صندوق ورودی (فقط برای نمایش اول‌پنل؛ پیام واقعی بازدیدکننده این‌جا اضافه می‌شه).
   messages: [
     {
       id: 'msg-1',

@@ -7,6 +7,13 @@
  * Writes are atomic (write temp + rename) so files can never corrupt.
  */
 
+/**
+ * ── فارسی ──
+ * دیتابیس فایلی بدون MySQL: خواندن/نوشتن JSON در api/data با دسترسی 0600
+ * (فقط صاحب فایل) + نوشتن اتمیک (temp + rename) که فایل نیمه‌کاره نمونه +
+ * ریت‌لیمیتر فایلی. ⚠️ پوشه api/data با .htaccess از وب بسته‌ست — بازش نکن.
+ */
+
 require_once __DIR__ . '/config.php';
 
 /** Read a JSON store file. Returns $default when missing/corrupt. */

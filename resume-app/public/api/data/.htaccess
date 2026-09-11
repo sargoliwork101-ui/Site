@@ -1,3 +1,4 @@
+# قفل وب: هیچ فایل داخل api/data (رمزها، SMTP، بک‌آپ‌ها) از مرورگر باز نشه.
 # DENY all web access to runtime secret files (Apache 2.4 + 2.2).
 # (These guards are ALSO written at runtime by ensure_data_dir(), in case
 # dotfiles get lost during upload.)

@@ -14,6 +14,11 @@
  *    errors): keys whose write failed keep returning the written value.
  *
  * Use `isPersistentStorageBlocked()` once at boot to warn the user.
+ *
+ * ── فارسی ──
+ * قانون: هیچ‌جا مستقیم localStorage/sessionStorage صدا نزن — همیشه از
+ * storage/sessionStore همین فایل استفاده کن. اگه مرورگر حافظه رو بسته باشه،
+ * این ماژول با حافظه موقت داخل‌تب ادامه می‌ده تا اپ کرش نکنه (با اخطار).
  */
 
 function makeSafeStorage(getBackend) {

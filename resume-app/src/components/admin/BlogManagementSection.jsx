@@ -13,6 +13,14 @@
  * @module BlogManagementSection
  */
 
+/**
+ * ── فارسی ──
+ * تب وبلاگ پنل: جدول پست‌ها (جستجو/فیلتر وضعیت) + فرم دوزبانه (عنوان/اسلاگ/
+ * کاور/تگ/سئو) + دو ادیتور ورد جدا برای متن فارسی و انگلیسی + دکمه پیش‌نمایش
+ * (BlogModal). عنوان فارسی اجباریه؛ اسلاگ از عنوان ساخته می‌شه.
+ * ⚠️ حذف پست با دیالوگ تاییده. وضعیت‌ها: منتشرشده/پیش‌نویس/آرشیو.
+ */
+
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { RichTextEditorModal } from '../common/RichTextEditorModal';

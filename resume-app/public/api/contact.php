@@ -7,6 +7,13 @@
  * mailed from the site's OWN host (no third party) with a Reply-To header.
  */
 
+/**
+ * ── فارسی ──
+ * دریافت پیام فرم تماس عمومی: تله honeypot + اعتبارسنجی سفت + ریت‌لیمیت،
+ * بعد ارسال به ایمیل بازیابی ادمین با Reply-To فرستنده. فایل پیوست از
+ * upload.php میاد و فقط اسمش این‌جا ثبت می‌شه.
+ */
+
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/mailer.php';
 

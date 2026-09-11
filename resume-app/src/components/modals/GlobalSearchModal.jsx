@@ -1,3 +1,13 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * GlobalSearchModal.jsx — جستجوی سراسری اسپات‌لایت (Ctrl+K)
+ * ═══════════════════════════════════════════════════════════════════
+ * چی توشه؟ جستجوی همزمان در بردها/مقالات/پست‌ها/مهارت‌ها/سوابق با ناوبری
+ * کیبورد (↑↓ + Enter)، هایلایت نتیجه، و پرش هوشمند (handleSelectResult:
+ * باز کردن مودال مربوطه یا اسکرول به سکشن).
+ * ⚠️ ورودی جستجو trim و lowercase می‌شه؛ ایندکس‌گذاری جدید (فیلد جدید) رو
+ * با گارد (x && String(x)) اضافه کن تا آیتم ناقص کرش نده.
+ */
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { toEnglishDigits, toPersianDigits } from '../../utils/numberHelper';

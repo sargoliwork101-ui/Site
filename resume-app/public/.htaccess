@@ -1,3 +1,10 @@
+# ═══════════════════════════════════════════════════════════════════
+# .htaccess — قوانین سرور لینوکس (روتینگ SPA + سرعت + امنیت)
+# چی کار می‌کنه؟ (۱) هر آدرسی که فایل واقعی نباشه رو به index.html می‌فرسته
+#   (وگرنه رفرش صفحه خطای ۴۰۴ می‌ده) (۲) فشرده‌سازی Gzip و کش مرورگر برای
+#   سرعت (۳) هدرهای امنیتی OWASP (۴) بستن دسترسی وب به api/data/ (رمزها!).
+# ⚠️ این فایل با بیلد داخل dist کپی می‌شه؛ بعد از تغییر، دوباره بیلد بگیر.
+# ═══════════════════════════════════════════════════════════════════
 # .htaccess for Linux shared host (cPanel, DirectAdmin, Apache)
 # Single Page App fallback + speed + OWASP security headers.
 # Portable: works in public_html AND in any subdirectory / subdomain.

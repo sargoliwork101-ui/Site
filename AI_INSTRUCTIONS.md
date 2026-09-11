@@ -17,7 +17,7 @@ You are assisting me in maintaining and developing my existing "Senior Hardware 
 - Framework: React 19 + Vite + Tailwind CSS + Lucide React + DOMPurify + jsPDF + html2canvas + Mammoth.js
 - Language: Full bilingual (Persian RTL & English LTR) with instant toggle.
 - Typography: Default font is Vazirmatn (وزیرمتن) across all pages and 50 templates.
-- State Management: Centralized in `src/context/DataContext.jsx` persisted in localStorage with automated JSON snapshots.
+- State Management: Centralized in `src/context/DataContext.jsx` (single-writer file!) persisted in localStorage with automated JSON snapshots; public content syncs from the PHP server when `api/` exists (server is source of truth).
 
 ### ⚠️ MANDATORY ARCHITECTURAL RULES & USER CONSTRAINTS (DO NOT VIOLATE):
 1. **Bilingual Fields Placement:** In the Admin Panel, EVERY single category, board, article, skill, education, and career field MUST have its equivalent English field positioned directly under the Persian field so the user can manually enter custom English text.
@@ -34,15 +34,16 @@ You are assisting me in maintaining and developing my existing "Senior Hardware 
 12. **50 Homepage Design Models:** The 50 homepage layout models in `src/data/templates.js` must remain selectable EXCLUSIVELY from inside the Admin Panel; no template pickers or banners in public view.
 13. **Strict In-Browser View-Only for Hardware Images & 3D Models:** Downloading, saving, or extracting raw 3D CAD/STEP files and board imagery is STRICTLY DISABLED for visitors to protect intellectual property. Users can interact with 3D PCB models (360° orbit, zoom, solder mask color switcher) exclusively in-browser.
 14. **Dedicated Engineering Blog Module:** The tech blog is accessible through the main header and footer without cluttering the single-page home layout, supporting category filtering, reading time estimation, interactive celebratory likes, and Word-style WYSIWYG admin editing.
-15. **Granular RBAC Multi-User System:** The system includes full Role-Based Access Control with pre-defined roles (`super_admin`, `content_editor`, `hardware_engineer`, `auditor_viewer`, `custom`) and granular permission matrix. First login in Secure mode runs a setup wizard (strong password + recovery email + inbox OTP) — there is NO default server password; Local mode keeps `admin`/`admin` only until the owner changes it (the default-password alarm must stay).
+15. **Granular RBAC Multi-User System:** The system includes full Role-Based Access Control with 6 pre-defined roles (`super_admin`, `admin`, `editor`, `author`, `viewer`, `custom`) and an 11-permission matrix (`canManage*`; see `UserManagementSection.jsx`). First login in Secure mode runs a setup wizard (strong password + recovery email + inbox OTP) — there is NO default server password; Local mode keeps `admin`/`admin` only until the owner changes it (the default-password alarm must stay).
 16. **Dynamic Display Limits ($Rows \times Cols$):** Homepage display limits for boards and scientific articles are dynamically calculated from $Rows \times Columns$ ($1, 2, 3, 4$ desktop columns and $1, 2, 3$ rows), with remaining items placed behind an expandable Show More toggle.
 17. **Consolidated Master Settings Hub:** All site-wide configuration modules (Layout & Limits, Favicon & Branding, User Management RBAC, 50 Design Templates, SEO Studio, Global Taxonomies, Database Backups, Security & Recovery) are grouped under the single unified master "Settings" tab in the Admin Panel sidebar.
 18. **Server Authority & No On-Screen OTP:** When `api/` exists, auth/OTP/reset-tokens/rate-limits live ONLY in PHP. OTP codes are inbox-only — NEVER render a fallback code in the UI, NEVER generate OTP client-side, NEVER route OTP through third parties.
 19. **No Secrets in Git:** Passwords, SMTP credentials, hashes and tokens must NEVER be committed or logged. The notification mailbox lives in `api/data/smtp.json` (0600, server-only) and is edited via the authed panel API. If a secret ever leaks into a commit, rotate it immediately.
 20. **Recovery-Question Gate:** The emergency local reset MUST stay gated by the hashed recovery answers (`resume_admin_secqa_v1`); never add a one-click reset.
 21. **Parallel Agents:** If several agents work on this repo at once, every agent MUST follow the "Multi-Agent Workflow" section of AI_INSTRUCTIONS.md (branch-per-task, ownership map, merge protocol, PR template).
+22. **Review-Hardened Invariants (do NOT regress):** (a) every DYNAMIC `href` goes through `sanitizeUrl` (never raw user/admin URLs); (b) new item IDs use `uniqueId(prefix)`, never bare `Date.now()`; (c) passwords are NEVER trimmed; (d) `triggerSafeDownload` takes a Blob/URL, never a raw object; (e) destructive actions need `showConfirmDialog`, every action needs an honest `showToast` (no fake success); (f) login failures must distinguish locked / rate_limit / network.
 
-Whenever you write or modify code, adhere strictly to these 21 constraints, provide clean code comments, and preserve existing features.
+Whenever you write or modify code, adhere strictly to these 22 constraints, provide clean code comments (Persian-first file headers), and preserve existing features.
 ```
 
 ---
@@ -62,9 +63,9 @@ Whenever you write or modify code, adhere strictly to these 21 constraints, prov
 | `public/api/config.php` + `store.php` | ذخیره فایلی اتمیک با دسترسی 0600، ریت‌لیمیتر، سشن امن، دفاع CSRF با هدر AJAX |
 | `src/utils/translatorHelper.js` | موتور کمکی ترجمه خودکار عبارات رایج فارسی به انگلیسی |
 | `src/components/admin/AdminPanel.jsx` | پنل مدیریت پیشرفته با فیلدهای دوزبانه زیر هم، ستاره پروژه شاخص، مدیریت دسته‌ها، بک‌آپ و تنظیمات امنیت |
-| `src/components/admin/UserManagementSection.jsx` | مدیریت جامع کاربران و سطوح دسترسی RBAC با ماتریس مجوزها و شبیه‌ساز سوئیچ سریع |
+| `src/components/admin/UserManagementSection.jsx` | مدیریت جامع کاربران و سطوح دسترسی RBAC با ماتریس ۱۱ مجوزه (حذف ادمین اصلی و خودحذفی ممنوع) |
 | `src/components/admin/BlogManagementSection.jsx` | داشبورد مدیریت و انتشار پست‌های وبلاگ مهندسی با ادیتور ورد و فیلدهای دوزبانه |
-| `src/components/modals/AdminLoginModal.jsx` | پنجره لاگین با شیلد ضد نفوذ، ورود سریع تستی، ویزارد ثبت ایمیل و فرآیند بازیابی رمز عبور با کد OTP |
+| `src/components/modals/AdminLoginModal.jsx` | دروازه ورود: لاگین با ریت‌لیمیت، ویزارد نصب اول (رمز+ایمیل+OTP)، بازیابی رمز و ریست اضطراری قفل‌شده |
 | `src/components/modals/GlobalSearchModal.jsx` | اسپات‌لایت سرچ سراسری با کلید میانبر `Ctrl+K` برای جستجوی همزمان در تمام داده‌ها |
 | `src/components/modals/PdfResumeModal.jsx` | خروجی رزومه A4 استاندارد در ۳ قالب (Modern Two-Column, Executive, Academic) با ترجمه ۱۰۰٪ انگلیسی/فارسی |
 | `src/components/modals/BoardModal.jsx` | نمایش جزئیات کامل برد با مشخصات استک‌آپ، پین‌اوت‌ها، نمایشگر سه‌بعدی تعاملی و حالت محافظت‌شده View-Only |
@@ -72,7 +73,7 @@ Whenever you write or modify code, adhere strictly to these 21 constraints, prov
 | `src/components/modals/BlogModal.jsx` | درگاه اختصاصی مطالعه مقالات وبلاگ مهندسی با فیلتر دسته‌بندی، جستجو و لایک تعاملی |
 | `src/components/common/Interactive3DViewer.jsx` | کامپوننت نمایشگر سه‌بعدی آنلاین بردها با قابلیت چرخش ۳۶۰ درجه، زوم، تعویض رنگ چاپ سبز و امنیت عدم دانلود |
 | `src/components/common/RichTextEditorModal.jsx` | ادیتور کامل ورد با جدول‌ساز، سمبل‌های مهندسی (Ω, µF)، ایمپورت DOCX و پیست از ورد |
-| `src/components/common/TaxonomyManagerModal.jsx` | مدیریت و تغییر نام گزینه‌های دراپ‌دان (دسته‌ها، وضعیت‌ها، نرم‌افزارها) با همگام‌سازی آبشاری خودکار |
+| `src/components/common/TaxonomyManager.jsx` | مدیریت و تغییر نام گزینه‌های دراپ‌دان (دسته‌ها، وضعیت‌ها، نرم‌افزارها) با همگام‌سازی آبشاری خودکار |
 | `src/components/sections/HeroSection.jsx` | بخش هدر و معرفی با کارت تعاملی PCB متصل به پروژه شاخص پویا و تایپوگرافی متحرک |
 | `src/components/sections/BoardsSection.jsx` | گرید نمایش بردهای سخت‌افزاری با مرتب‌سازی زمانی بر اساس تاریخ ساخت و رندر مشروط |
 | `src/components/sections/ArticlesSection.jsx` | لیست مقالات پژوهشی با فیلتر تگ‌ها، سرچ اختصاصی و رندر مشروط |
@@ -81,6 +82,20 @@ Whenever you write or modify code, adhere strictly to these 21 constraints, prov
 | `src/components/sections/ContactSection.jsx` | فرم تماس ضد اسپم با تله هانی‌پات، Rate Limiting و ارسال مستقیم پیام به ایمیل مدیر |
 | `src/components/common/Navbar.jsx` | نوبار شناور با سرچ ذره‌بین، دانلود رزومه، ورود ادمین و لینک‌های ناوبری داینامیک |
 | `src/components/common/Footer.jsx` | فوتر سایت با لینک‌های شبکه‌های اجتماعی و ناوبری متصل به سکشن‌های فعال |
+| `src/components/common/Toast.jsx` | نمایش صف پیام‌های شناور (منطق در `showToast` دیتا) |
+| `src/components/common/ActionDialogModal.jsx` | دیالوگ تایید/هشدار سراسری (جایگزین `window.confirm`) |
+| `src/components/common/ErrorBoundary.jsx` | تور نجات ضد صفحه‌سفید با دکمه بازیابی و پاک‌سازی کش |
+| `src/components/common/BackgroundCanvas.jsx` | پس‌زمینه متحرک canvas (جلوه قالب فعال + تاگل خاموشی) |
+| `src/components/common/CustomAudioPlayer.jsx` | پخش‌کننده صوت/پادکست (استاندارد + حالت hero) |
+| `src/components/common/BrandIcons.jsx` | آیکون‌های SVG دستی گیت‌هاب/لینکدین |
+| `src/components/blog/BlogPortalPage.jsx` | پرتال عمومی وبلاگ (نمای جدا با `#blog`) |
+| `src/utils/safeStorage.js` | حافظه امن با fallback داخل‌تب (تنها راه مجاز دسترسی به storage) |
+| `src/utils/numberHelper.js` | ارقام فارسی/انگلیسی و `formatNum` نمایشی |
+| `public/api/upload.php` | آپلود فایل پیوست فرم تماس (اسم تصادفی، ضداجرا) |
+| `public/api/content.php` | همگام‌سازی محتوای عمومی (خواندن عمومی، نوشتن با سشن ادمین) |
+| `public/api/session.php` | تنها مرجع سشن امن (پرچم‌ها + انقضا + چرخش) |
+| `public/.htaccess` | روتینگ SPA + کش + هدرهای OWASP + قفل `api/data/` |
+| `build-upload-zip.sh` | ساخت `site-upload.zip` آماده آپلود (فقط اینتگریتور) |
 
 ---
 
@@ -155,6 +170,7 @@ Whenever you write or modify code, adhere strictly to these 21 constraints, prov
 ```bash
 cd resume-app
 npm run build            # باید سبز شود
+npm run lint             # صفر ارور؛ هشدار جدید اضافه نکن
 # راستی‌آزمایی تعریف/استفاده شناسه‌های جدید در هر فایل لمس‌شده:
 grep -n "YourNewIdentifier" src/path/ToFile.jsx
 ```

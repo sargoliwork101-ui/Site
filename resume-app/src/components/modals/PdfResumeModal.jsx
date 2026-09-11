@@ -1,3 +1,13 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * PdfResumeModal.jsx — پیش‌نمایش و خروجی PDF رزومه (۳ قالب، فارسی/انگلیسی)
+ * ═══════════════════════════════════════════════════════════════════
+ * چی توشه؟ رندر A4 از دیتای زنده (personalInfo/سوابق/مهارت...)، دانلود PDF
+ * باکیفیت (html2canvas + jsPDF — هر دو lazy ایمپورت می‌شن تا لود اول سنگین
+ * نشه)، و چاپ مستقیم (window.print).
+ * ⚠️ کتابخانه‌های PDF رو static ایمپورت نکن (حجم باندل اول). در حالت انگلیسی
+ * همه رشته‌ها باید انگلیسی باشن (قانون ۱۰) — رشته فارسی جدید نذار.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { formatNum, toEnglishDigits, toPersianDigits } from '../../utils/numberHelper';

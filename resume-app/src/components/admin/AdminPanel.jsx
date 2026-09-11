@@ -1,3 +1,21 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * AdminPanel.jsx — پنل مدیریت (بزرگ‌ترین فایل فرانت، ~۵۸۰۰ خط)
+ * ═══════════════════════════════════════════════════════════════════
+ * چی توشه؟ ۱۰ تب اصلی: داشبورد، اطلاعات فردی، وبلاگ، بردها، مقالات،
+ * مهارت‌ها، سوابق (۳ زیرتب)، مدیا، صندوق پیام‌ها، و تنظیمات کلان که خودش
+ * ۸ زیرتب داره: چیدمان، برندینگ/فویکون، کاربران(RBAC)، قالب‌ها، سئو،
+ * دسته‌ها، پشتیبان‌گیری، امنیت/SMTP. تب‌های وبلاگ و کاربران کامپوننت جدا
+ * هستن (Blog/UserManagementSection) و این‌جا فقط سوار شدن.
+ * کِی بازش کن؟ هر ویرایش فرم‌های ادمین. با Ctrl+F دنبال بنر تب بگرد:
+ *   TAB: DASHBOARD / PERSONAL / BLOG / MEDIA / BOARDS / ARTICLES / SKILLS /
+ *   EXPERIENCE / INBOX / SETTINGS و SET: LAYOUT / BRANDING / USERS / DESIGN /
+ *   SEO / TAXONOMIES / BACKUP / SECURITY.
+ * دستور فرم جدید: state فرم + هندلر handleXxxSave با اعتبارسنجی و Toast +
+ *   صدا زدن CRUD دیتا + فیلد انگلیسی زیر فارسی (قانون ۱). آپلود فایل فقط با
+ *   validateUploadFile. حذف همیشه با showConfirmDialog.
+ * ⚠️ این فایل تک‌نویسنده‌ست (دو نفر همزمان ویرایش نکنن) و lazy لود می‌شه.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { RichTextEditorModal } from '../common/RichTextEditorModal';
@@ -1485,6 +1503,7 @@ export const AdminPanel = () => {
           {/* Tab Content Panel */}
           <main className="flex-1 p-4 sm:p-6 overflow-y-auto bg-slate-900/50">
             {/* 1. DASHBOARD OVERVIEW TAB */}
+            {/* ═══ TAB: DASHBOARD — داشبورد و وضعیت (آمار، سلامت بک‌اند، میان‌برها) ═══ */}
             {activeTab === 'dashboard' && (
               <div className="space-y-6 max-w-none">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1524,11 +1543,13 @@ export const AdminPanel = () => {
 
 
             {/* BLOG & ENGINEERING INSIGHTS MANAGEMENT TAB */}
+            {/* ═══ TAB: BLOG — سوار شدن BlogManagementSection (منطق در فایل خودش) ═══ */}
             {activeTab === 'blog' && (
               <BlogManagementSection />
             )}
 
             {/* 3. MEDIA LIBRARY TAB */}
+            {/* ═══ TAB: MEDIA — کتابخانه رسانه و آپلود عکس ═══ */}
             {activeTab === 'media' && (
               <div className="space-y-6 max-w-none">
                 <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1620,6 +1641,7 @@ export const AdminPanel = () => {
             )}
 
             {/* 4. PERSONAL INFO TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
+            {/* ═══ TAB: PERSONAL — فرم اطلاعات فردی و بیو دوزبانه ═══ */}
             {activeTab === 'personal' && (
               <form onSubmit={handlePersonalSubmit} className="space-y-6 max-w-none">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -1928,6 +1950,7 @@ export const AdminPanel = () => {
             )}
 
             {/* 5. HARDWARE BOARDS TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
+            {/* ═══ TAB: BOARDS — لیست + فرم برد (ستاره شاخص، آپلود دیتاشیت/STEP) ═══ */}
             {activeTab === 'boards' && (
               <div className="space-y-6 max-w-none">
                 {boardForm ? (
@@ -2808,6 +2831,7 @@ export const AdminPanel = () => {
             )}
 
             {/* 6. ARTICLES TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
+            {/* ═══ TAB: ARTICLES — لیست + فرم مقالات (آپلود PDF، تگ‌ها) ═══ */}
             {activeTab === 'articles' && (
               <div className="space-y-6 max-w-none">
                 {articleForm ? (
@@ -3238,6 +3262,7 @@ export const AdminPanel = () => {
             )}
 
             {/* 7. SKILLS & CARDS STUDIO TAB (FULL BILINGUAL) */}
+            {/* ═══ TAB: SKILLS — کارت گروه‌ها + آیتم‌های مهارت (درصد تسلط) ═══ */}
             {activeTab === 'skills' && (
               <div className="space-y-6 max-w-none">
                 <div className="p-6 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -3470,6 +3495,7 @@ export const AdminPanel = () => {
             )}
 
             {/* 8. EXPERIENCE TAB (WITH ENGLISH FIELD UNDER EACH PERSIAN FIELD) */}
+            {/* ═══ TAB: EXPERIENCE — ۳ زیرتب سوابق/تحصیل/گواهی (بنرهای SUB-TAB پایین) ═══ */}
             {activeTab === 'experience' && (
               <div className="space-y-6 max-w-none">
                 {/* Sub-tab Navigation */}
@@ -4135,6 +4161,7 @@ export const AdminPanel = () => {
             )}
 
             {/* 9. MESSAGES INBOX TAB */}
+            {/* ═══ TAB: INBOX — صندوق پیام‌های تماس (خوانده/ستاره/حذف/پیوست) ═══ */}
             {activeTab === 'inbox' && (
               <div className="space-y-4 max-w-none">
                 <div className="flex items-center justify-between">
@@ -4246,6 +4273,7 @@ export const AdminPanel = () => {
             )}
 
                         {/* 10. UNIFIED MASTER SETTINGS & SYSTEM CONFIGURATION TAB */}
+            {/* ═══ TAB: SETTINGS — تنظیمات کلان (۸ زیرتب با بنر SET: پایین) ═══ */}
             {activeTab === 'settings' && (
               <div className="space-y-6 max-w-none">
                 {/* Master Settings Sub-navigation Bar */}
@@ -4281,6 +4309,7 @@ export const AdminPanel = () => {
                 </div>
 
                 {/* Sub-tab 1: Layout & Grid Preferences (Rows * Columns = Dynamic Limit) */}
+                {/* ═══ SET: LAYOUT — چیدمان و ردیف‌ها (rows×cols) ═══ */}
                 {settingsSubTab === 'layout' && (
                   <form onSubmit={handleLayoutSubmit} className="space-y-6">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
@@ -4446,6 +4475,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 2: Favicon, Branding & Descriptions */}
+                {/* ═══ SET: BRANDING — فویکون (آپلود/آماده) و توضیحات سایت ═══ */}
                 {settingsSubTab === 'branding' && (
                   <form onSubmit={handleBrandingSubmit} className="space-y-6">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
@@ -4689,6 +4719,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 3: User Management & RBAC */}
+                {/* ═══ SET: USERS — سوار شدن UserManagementSection (منطق در فایل خودش) ═══ */}
                 {settingsSubTab === 'users' && (
                   <div className="space-y-4">
                     <UserManagementSection />
@@ -4696,6 +4727,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 4: 50 Design Templates */}
+                {/* ═══ SET: DESIGN — میان‌بر انتخابگر ۵۰ قالب ═══ */}
                 {settingsSubTab === 'design' && (
                   <div className="space-y-6">
                     <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
@@ -4736,6 +4768,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 5: SEO Studio */}
+                {/* ═══ SET: SEO — استودیو سئو (متاتگ‌ها + canonical) ═══ */}
                 {settingsSubTab === 'seo' && (
                   <form onSubmit={handleSeoSubmit} className="space-y-6">
                     <div className="flex items-center justify-between">
@@ -4864,6 +4897,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 6: Taxonomies */}
+                {/* ═══ SET: TAXONOMIES — سوار شدن TaxonomyManager (۴ کارت گزینه‌ها) ═══ */}
                 {settingsSubTab === 'taxonomies' && (
                   <div className="space-y-6">
                     <div className="p-6 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-1">
@@ -4881,6 +4915,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 7: Backup & Database */}
+                {/* ═══ SET: BACKUP — مرکز بک‌آپ: هاست/دستی/خودکار/ایمپورت/انتقال ═══ */}
                 {settingsSubTab === 'backup' && (
                   <div className="space-y-6">
                     <div className="p-6 rounded-2xl bg-slate-950/90 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -5320,6 +5355,7 @@ export const AdminPanel = () => {
                 )}
 
                 {/* Sub-tab 9: Security & Password */}
+                {/* ═══ SET: SECURITY — رمز، سؤالات بازیابی، ایمیل، صندوق SMTP ═══ */}
                 {settingsSubTab === 'security' && (
                   <div className="space-y-6">
                     {/* Security-mode banner (honest: server vs local) */}

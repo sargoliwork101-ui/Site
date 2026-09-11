@@ -1,3 +1,12 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * ArticleModal.jsx — مودال خواندن مقاله (متن غنی + دانلود PDF + چاپ)
+ * ═══════════════════════════════════════════════════════════════════
+ * چی توشه؟ رندر HTML مقاله (تمیزکاری‌شده با sanitizeRichHtml)، تگ‌ها، دکمه
+ * دانلود سند (sanitizeUrl)، کپی لینک و چاپ مقاله (printArticle).
+ * با setSelectedArticle باز/بسته می‌شه (null = بسته).
+ * ⚠️ محتوای غنی رو هرگز بدون sanitizeRichHtml رندر نکن (XSS).
+ */
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { sanitizeRichHtml, copyTextToClipboard } from '../../utils/security';

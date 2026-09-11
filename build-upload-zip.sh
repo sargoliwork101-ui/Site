@@ -1,3 +1,10 @@
+# ═══════════════════════════════════════════════════════════════════
+# build-upload-zip.sh — ساخت فایل آماده آپلود (site-upload.zip)
+# طرز کار: از روی خروجی تازه dist + پوشه api + htaccess، یه زیپ تمیز می‌سازه؛
+# زیپ قبلی رو اول پاک می‌کنه (وگرنه فایل‌های قدیمی بیلد توش می‌مونن) و هرگز
+# دیتای ران‌تایم (رمزها، سشن‌ها، بک‌آپ‌ها) رو داخل زیپ نمی‌ذاره.
+# استفاده (از ریشه ریپو):  npm run build (داخل resume-app) بعد ./build-upload-zip.sh
+# ═══════════════════════════════════════════════════════════════════
 #!/usr/bin/env bash
 # Rebuild site-upload.zip from a fresh `npm run build`.
 # Usage: ./build-upload-zip.sh   (run from the repo root)

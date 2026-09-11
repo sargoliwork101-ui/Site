@@ -1,3 +1,11 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * ArticlesSection.jsx — لیست مقالات تخصصی صفحه اول
+ * ═══════════════════════════════════════════════════════════════════
+ * چی توشه؟ جستجوی متنی + فیلتر تگ + سقف نمایش (ردیف×ستون) با دکمه بیشتر،
+ * و باز کردن مودال مقاله با setSelectedArticle.
+ * ⚠️ مثل بردها: صفر مقاله = عدم رندر + حذف لینک ناوبری (قانون ۵).
+ */
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { formatNum, toEnglishDigits } from '../../utils/numberHelper';

@@ -10,7 +10,12 @@
  * 4. User Status (Active / Inactive) toggle
  * 5. Primary Admin Protection (prevents accidental deletion of root admin)
  *
- * @module UserManagementSection
+ * ── فارسی ──
+ * تب کاربران پنل: ساخت/ویرایش کاربر + انتخاب نقش (۵ نقش آماده یا سفارشی) +
+ * ماتریس ۱۰ مجوز + فعال/غیرفعال. ادمین اصلی (admin) قابل حذف نیست و هیچ‌کس
+ * نمی‌تونه خودش رو حذف کنه (هر دو با پیام خطا).
+ * ⚠️ رمزها هرگز trim نمی‌شن و فقط هش‌شده ذخیره می‌شن. برای نقش جدید اول
+ * ROLE_DEFINITIONS در DataContext رو گسترش بده بعد این فرم رو.
  */
 
 import React, { useState } from 'react';

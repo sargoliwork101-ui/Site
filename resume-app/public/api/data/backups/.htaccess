@@ -1,3 +1,4 @@
+# قفل وب: فایل‌های بک‌آپ هاست فقط از API با سشن ادمین قابل دسترسن.
 # DENY all web access to server backup files (Apache 2.4 + 2.2).
 # (These guards are ALSO written at runtime by backup_ensure_dir(), in case
 # dotfiles get lost during upload.)

@@ -10,6 +10,24 @@
  * @module security
  */
 
+/**
+ * ── راهنمای فارسی: نقشه این فایل ──
+ * جعبه‌ابزار امنیت فرانت. هر تابع کجا به کار میاد:
+ *   sanitizeText / sanitizeRichHtml → تمیزکاری متن ساده / HTML غنی (قبل از نمایش)
+ *   sanitizeUrl (v2) → تنها راه امن برای href داینامیک؛ javascript:/data:text
+ *     رو می‌بنده ولی آدرس نسبی هاست (uploads/...) رو قبول می‌کنه
+ *   validateEmail / sanitizeFileName / validateUploadFile → اعتبارسنجی ورودی و آپلود
+ *   sanitizeBackupPayload → ضد prototype-pollution برای فایل بک‌آپ ورودی
+ *   sanitizeSvgDataUrl → پاک‌سازی اسکریپت داخل SVG آپلودشده
+ *   triggerSafeDownload → دانلود امن فایل (⚠️ فقط Blob یا URL پاس بده، نه آبجکت!)
+ *   uniqueId → ساخت آی‌دی یکتای ضدتصادم برای آیتم‌های جدید (به‌جای Date.now خالی)
+ *   timingSafeEqual / hashPasswordLocal / verifyPasswordLocal → احراز هویت محلی
+ *   RateLimiter + سه نمونه آماده → ضد brute-force لاگین/تماس/OTP (سمت سرور هم هست)
+ *   copyTextToClipboard → کپی مطمئن با fallback برای هاست بدون HTTPS
+ * ⚠️ قانون طلایی: هیچ تصمیم امنیتی نهایی این‌جا گرفته نمی‌شه — در حالت امن،
+ * سرور (PHP) مرجعه. این توابع فقط لایه دفاعی اول فرانت هستن.
+ */
+
 import DOMPurify from 'dompurify';
 
 /**

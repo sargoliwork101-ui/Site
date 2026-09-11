@@ -5,6 +5,14 @@
  * Prevents white screen of death by catching rendering exceptions and offering
  * 1-click automatic state repair.
  */
+/**
+ * ── راهنمای فارسی ──
+ * این فایل «تور نجات» سایته: اگه هرجای React خطای رندر بده (صفحه سفید)،
+ * این صفحه خطای فارسی با دو دکمه نشون می‌ده: «بارگذاری مجدد» و «پاکسازی
+ * کش و بازنشانی کامل» (حافظه مرورگر رو پاک می‌کنه). دور DataProvider در
+ * App.jsx پیچیده شده پس همه‌چیز رو پوشش می‌ده.
+ */
+
 
 import React from 'react';
 import { AlertCircle, RefreshCw, RotateCcw } from 'lucide-react';
