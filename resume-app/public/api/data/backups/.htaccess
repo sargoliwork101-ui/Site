@@ -1,0 +1,10 @@
+# DENY all web access to server backup files (Apache 2.4 + 2.2).
+# (These guards are ALSO written at runtime by backup_ensure_dir(), in case
+# dotfiles get lost during upload.)
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order Allow,Deny
+  Deny from all
+</IfModule>

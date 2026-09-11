@@ -1,0 +1,86 @@
+# .htaccess for Linux shared host (cPanel, DirectAdmin, Apache)
+# Single Page App fallback + speed + OWASP security headers.
+# Portable: works in public_html AND in any subdirectory / subdomain.
+
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # NOTE: no "RewriteBase /" and no "/index.html" absolute target on purpose,
+  # so this file also works when the site lives in a subdirectory.
+
+  # Block hidden dotfiles (.git, .env, ...) but NEVER block .well-known
+  # (Let's Encrypt / AutoSSL needs it for free HTTPS certificates).
+  RewriteCond %{REQUEST_URI} !/.well-known/
+  RewriteRule ^\. - [F,L]
+
+  # SPA fallback: serve index.html for any non-file, non-directory request.
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . index.html [L]
+</IfModule>
+
+# NOTE: no bare "Options -Indexes" here — on hosts with limited AllowOverride
+# that single line causes "500 Internal Server Error". The SPA fallback above
+# already serves index.html for directory URLs, so listings are not exposed.
+
+# Correct MIME types for self-hosted fonts (some hosts miss woff2 by default)
+<IfModule mod_mime.c>
+  AddType font/woff2 .woff2
+  AddType font/woff .woff
+  AddType application/javascript .js .mjs
+</IfModule>
+
+# Gzip Compression for fast loading
+# (woff/woff2 intentionally excluded — already compressed, re-compressing
+# them only burns server CPU for zero bytes saved.)
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/xml image/svg+xml
+</IfModule>
+
+# Browser Caching
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpg "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/gif "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+</IfModule>
+
+# Hashed build assets: Vite emits content-hashed js/css/font filenames, so they
+# are safe to cache forever → instant repeat visits (HTML/API untouched).
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|woff2?)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+# Modern HTTP Security Headers (OWASP)
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set X-XSS-Protection "1; mode=block"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  # HSTS: HTTPS-only enforcement (browsers ignore it over plain HTTP, so it is
+  # safe to ship unconditionally; deliberately WITHOUT includeSubDomains so
+  # sibling subdomains on hosts without HTTPS never break).
+  Header set Strict-Transport-Security "max-age=31536000"
+</IfModule>
+
+# Default Charset UTF-8
+AddDefaultCharset UTF-8
+
+# Defense in depth: never serve PHP secret stores, even if api/data/.htaccess
+# gets lost during upload. (Unanchored on purpose: works in subdirectories too.)
+<IfModule mod_alias.c>
+  RedirectMatch 403 /api/data/
+</IfModule>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fa" dir="rtl" class="dark bg-slate-950">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ffcc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='20' rx='5' ry='5'></rect><path d='M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z'></path><line x1='17.5' y1='6.5' x2='17.51' y2='6.5'></line></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Perf: warm up the default cover-image CDN so hero images start sooner -->
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
+    <!-- Defense-in-depth: no inline scripts exist in this build, so block them
+         entirely (kills most stored-XSS payloads). Inline STYLES are required
+         by React, hence 'unsafe-inline' for style-src only. On the live host,
+         also send `X-Frame-Options: SAMEORIGIN` (see server/htaccess snippet). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://formsubmit.co; base-uri 'self'; form-action 'self' https://formsubmit.co"
+    />
+    <title>مهندس الکترونیک و سیستم‌های امبدد | رزومه و پورتفولیو حرفه‌ای</title>
+    <meta name="description" content="پورتفولیو و رزومه حرفه‌ای مهندس الکترونیک، طراح بردهای سخت‌افزاری PCB، سیستم‌های امبدد، اینترنت اشیا و مقالات تخصصی." />
+    <meta name="keywords" content="طراحی برد, PCB, الکترونیک, STM32, اینترنت اشیا, امبدد, مقاله علمی, رزومه مهندسی" />
+    <meta name="author" content="مهندس الکترونیک و امبدد" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="رزومه و پورتفولیو تخصصی سخت‌افزار و الکترونیک" />
+    <meta property="og:description" content="مشاهده بردهای الکترونیکی ساخته‌شده، مقالات و سوابق کاری مهندس ارشد امبدد." />
+    
+    <!-- Ultra-fast Instant System & Persian Typography Styling (Zero External Blocking) -->
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: #030712 !important;
+        color: #f8fafc;
+        font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow-x: hidden;
+      }
+      
+      /* Print Resume Styles */
+      @media print {
+        body {
+          background: white !important;
+          color: black !important;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+      }
+      
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.6);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(100, 116, 139, 0.5);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.8);
+      }
+    </style>
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
